@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
 
 type Difficulty = 'principiante' | 'intermedio' | 'avanzado';
 
@@ -14,6 +15,20 @@ type DiceSet = {
   obstacle: string[];
   difficultyWeight: Record<Difficulty, number>;
   tricks: Trick[];
+};
+
+type DiceResult = {
+  adaptedDifficulty: Difficulty;
+  stance: string;
+  obstacle: string;
+  trick: Trick;
+};
+
+type RollDynamics = {
+  durationMs: number;
+  staggerMs: number;
+  baseRotationDeg: number;
+  shakePx: number;
 };
 
 const trickPools: Record<Difficulty, DiceSet> = {
@@ -80,6 +95,10 @@ function randomFrom<T>(array: T[]) {
   return array[Math.floor(Math.random() * array.length)];
 }
 
+function randomInt(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
 function pickDifficulty(baseDifficulty: Difficulty): Difficulty {
   const weights = trickPools[baseDifficulty].difficultyWeight;
   const roll = Math.random();
@@ -96,15 +115,22 @@ function pickDifficulty(baseDifficulty: Difficulty): Difficulty {
   return baseDifficulty;
 }
 
+function buildRollDynamics(): RollDynamics {
+  return {
+    durationMs: randomInt(1500, 1800),
+    staggerMs: randomInt(90, 130),
+    baseRotationDeg: randomInt(1300, 1900),
+    shakePx: randomInt(6, 9),
+  };
+}
+
 export default function DicePage() {
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>('principiante');
   const [isRolling, setIsRolling] = useState(false);
-  const [result, setResult] = useState<{
-    adaptedDifficulty: Difficulty;
-    stance: string;
-    obstacle: string;
-    trick: Trick;
-  } | null>(null);
+  const [rollId, setRollId] = useState(0);
+  const [dynamics, setDynamics] = useState<RollDynamics>(buildRollDynamics);
+  const [result, setResult] = useState<DiceResult | null>(null);
+  const [preview, setPreview] = useState<Omit<DiceResult, 'adaptedDifficulty'> | null>(null);
 
   const activePool = useMemo(() => trickPools[selectedDifficulty], [selectedDifficulty]);
 
@@ -113,22 +139,39 @@ export default function DicePage() {
       return;
     }
 
+    const nextDynamics = buildRollDynamics();
+    const adaptedDifficulty = pickDifficulty(selectedDifficulty);
+    const pool = trickPools[adaptedDifficulty];
+
+    const finalResult: DiceResult = {
+      adaptedDifficulty,
+      stance: randomFrom(pool.stance),
+      obstacle: randomFrom(pool.obstacle),
+      trick: randomFrom(pool.tricks),
+    };
+
+    setDynamics(nextDynamics);
+    setRollId((prev) => prev + 1);
     setIsRolling(true);
     setResult(null);
 
-    window.setTimeout(() => {
-      const adaptedDifficulty = pickDifficulty(selectedDifficulty);
-      const pool = trickPools[adaptedDifficulty];
-
-      setResult({
-        adaptedDifficulty,
-        stance: randomFrom(pool.stance),
-        obstacle: randomFrom(pool.obstacle),
-        trick: randomFrom(pool.tricks),
+    const tickInterval = window.setInterval(() => {
+      setPreview({
+        stance: randomFrom(activePool.stance),
+        obstacle: randomFrom(activePool.obstacle),
+        trick: randomFrom(activePool.tricks),
       });
+    }, 110);
+
+    window.setTimeout(() => {
+      window.clearInterval(tickInterval);
+      setResult(finalResult);
+      setPreview(null);
       setIsRolling(false);
-    }, 1300);
+    }, nextDynamics.durationMs);
   };
+
+  const tileLabels = ['Postura', 'Obstáculo', 'Truco'] as const;
 
   return (
     <section className="space-y-8">
@@ -179,32 +222,74 @@ export default function DicePage() {
           >
             {isRolling ? 'Girando dados...' : 'Lanzar dados'}
           </button>
+          <p className="mt-3 text-xs text-deck-200">
+            Preset realista: {Math.round(dynamics.durationMs / 10) / 100}s, stagger {dynamics.staggerMs}ms,
+            shake {dynamics.shakePx}px.
+          </p>
         </article>
 
         <article className="rounded-xl border border-deck-700 bg-deck-800 p-6">
           <h2 className="text-xl font-semibold">2) Resultado</h2>
 
           <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {['Postura', 'Obstáculo', 'Truco'].map((label, index) => (
-              <div
-                key={label}
-                className={`rounded-lg border border-deck-700 bg-deck-900/70 p-4 text-center ${
-                  isRolling ? 'animate-pulse' : ''
-                }`}
-                style={{ animationDelay: `${index * 120}ms` }}
-              >
-                <p className="text-xs uppercase tracking-[0.2em] text-deck-200">{label}</p>
-                <p className="mt-2 text-sm font-semibold text-white">
-                  {isRolling
-                    ? '...'
-                    : label === 'Postura'
-                      ? result?.stance ?? '—'
-                      : label === 'Obstáculo'
-                        ? result?.obstacle ?? '—'
-                        : result?.trick.name ?? '—'}
-                </p>
-              </div>
-            ))}
+            {tileLabels.map((label, index) => {
+              const previewValue =
+                label === 'Postura'
+                  ? preview?.stance
+                  : label === 'Obstáculo'
+                    ? preview?.obstacle
+                    : preview?.trick.name;
+
+              const finalValue =
+                label === 'Postura'
+                  ? result?.stance
+                  : label === 'Obstáculo'
+                    ? result?.obstacle
+                    : result?.trick.name;
+
+              const value = isRolling ? previewValue ?? '...' : finalValue ?? '—';
+
+              return (
+                <motion.div
+                  key={`${label}-${rollId}`}
+                  className="rounded-lg border border-deck-700 bg-deck-900/70 p-4 text-center"
+                  initial={false}
+                  animate={
+                    isRolling
+                      ? {
+                          x: [0, dynamics.shakePx, -dynamics.shakePx, dynamics.shakePx * 0.6, 0],
+                          y: [0, -3, 2, -1, 0],
+                          rotateZ: [0, dynamics.baseRotationDeg + index * 120],
+                          scale: [1, 1.06, 1.02, 1],
+                          filter: ['blur(0px)', 'blur(2px)', 'blur(1px)', 'blur(0px)'],
+                        }
+                      : {
+                          x: 0,
+                          y: 0,
+                          rotateZ: 0,
+                          scale: [1.02, 0.99, 1],
+                          filter: 'blur(0px)',
+                        }
+                  }
+                  transition={
+                    isRolling
+                      ? {
+                          duration: dynamics.durationMs / 1000,
+                          delay: (index * dynamics.staggerMs) / 1000,
+                          ease: [0.22, 1, 0.36, 1],
+                          times: [0, 0.15, 0.5, 0.82, 1],
+                        }
+                      : {
+                          duration: 0.22,
+                          ease: 'easeOut',
+                        }
+                  }
+                >
+                  <p className="text-xs uppercase tracking-[0.2em] text-deck-200">{label}</p>
+                  <p className="mt-2 text-sm font-semibold text-white">{value}</p>
+                </motion.div>
+              );
+            })}
           </div>
 
           {result ? (
