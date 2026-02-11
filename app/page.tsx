@@ -11,9 +11,9 @@ const games = [
   {
     title: 'Juego de Dados',
     description:
-      'Cada dado tendrá trucos y variaciones. Aquí preparamos la ruta y la narrativa base para diseñarlo en la siguiente fase.',
+      'Lanza los dados para generar retos de skate por dificultad, con selección de nivel y animación de resultado.',
     href: '/dice',
-    status: 'Diseño' as const,
+    status: 'Activo' as const,
   },
   {
     title: 'Perfil y stats',
