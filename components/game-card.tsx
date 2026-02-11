@@ -4,7 +4,7 @@ type GameCardProps = {
   title: string;
   description: string;
   href: string;
-  status: 'Diseño' | 'Próximamente';
+  status: 'Diseño' | 'Activo' | 'Próximamente';
 };
 
 export function GameCard({ title, description, href, status }: GameCardProps) {
