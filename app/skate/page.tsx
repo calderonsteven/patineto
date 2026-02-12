@@ -68,11 +68,10 @@ export default function SkatePage() {
   const [startingPlayerName, setStartingPlayerName] = useState('');
   const [rpsLabel, setRpsLabel] = useState('🪨 Piedra...');
 
-  const [isRoundModalOpen, setIsRoundModalOpen] = useState(false);
-  const [roundSetterId, setRoundSetterId] = useState('');
-  const [roundTrickName, setRoundTrickName] = useState('');
   const [showAllSkaters, setShowAllSkaters] = useState(false);
   const [selectedSetterCardId, setSelectedSetterCardId] = useState('');
+  const [trickDraft, setTrickDraft] = useState('');
+  const [isChoosingNextRound, setIsChoosingNextRound] = useState(false);
 
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -117,6 +116,35 @@ export default function SkatePage() {
   const playersById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
   const remainingPlayers = useMemo(() => players.filter((player) => !player.eliminated), [players]);
   const winner = phase === 'play' && remainingPlayers.length === 1 ? remainingPlayers[0] : null;
+  const lastRound = rounds.length ? rounds[rounds.length - 1] : null;
+
+  const playerStats = useMemo(() => {
+    return players.map((player) => {
+      const tricksSet = rounds.filter((round) => round.setterId === player.id).map((round) => round.trick);
+      const falloCount = rounds.reduce((acc, round) => (round.statuses[player.id] === 'fallo' ? acc + 1 : acc), 0);
+      const logroCount = rounds.reduce((acc, round) => (round.statuses[player.id] === 'logro' ? acc + 1 : acc), 0);
+
+      return {
+        ...player,
+        tricksSet,
+        falloCount,
+        logroCount,
+      };
+    });
+  }, [players, rounds]);
+
+  const playerStatsById = useMemo(() => new Map(playerStats.map((player) => [player.id, player])), [playerStats]);
+
+  const leaderId = useMemo(() => {
+    if (!players.length) return null;
+    return [...players].sort((a, b) => {
+      if (a.letterCount !== b.letterCount) return a.letterCount - b.letterCount;
+      const tricksA = rounds.filter((round) => round.setterId === a.id).length;
+      const tricksB = rounds.filter((round) => round.setterId === b.id).length;
+      if (tricksA !== tricksB) return tricksB - tricksA;
+      return a.name.localeCompare(b.name);
+    })[0]?.id;
+  }, [players, rounds]);
 
   useEffect(() => {
     if (phase !== 'starting') return;
@@ -183,6 +211,8 @@ export default function SkatePage() {
     setCurrentRound(null);
     setShowAllSkaters(false);
     setSelectedSetterCardId('');
+    setTrickDraft('');
+    setIsChoosingNextRound(false);
     setPhase('order');
 
     setTimeout(() => {
@@ -209,36 +239,33 @@ export default function SkatePage() {
       .every((player) => currentRound.statuses[player.id] === 'fallo' || currentRound.statuses[player.id] === 'logro');
   }, [currentRound, currentParticipants]);
 
-  const openRoundModal = (presetSetterId?: string) => {
+  const openRoundChooser = () => {
     if (winner) return;
-
-    const activeIds = remainingPlayers.map((player) => player.id);
-    const defaultSetter = presetSetterId && activeIds.includes(presetSetterId) ? presetSetterId : activeIds[0] ?? '';
-
-    setRoundSetterId(defaultSetter);
-    setRoundTrickName('');
-    setIsRoundModalOpen(true);
+    setIsChoosingNextRound(true);
+    setSelectedSetterCardId('');
+    setTrickDraft('');
   };
 
   const startNextRound = () => {
-    if (!roundSetterId || !roundTrickName.trim()) return;
+    if (!selectedSetterCardId || !trickDraft.trim()) return;
 
     const statuses: Record<string, RoundStatus> = {};
     players.forEach((player) => {
-      if (player.id !== roundSetterId && !player.eliminated) statuses[player.id] = null;
+      if (player.id !== selectedSetterCardId && !player.eliminated) statuses[player.id] = null;
     });
 
     const nextRound: Round = {
       id: createId(),
       number: rounds.length + 1,
-      setterId: roundSetterId,
-      trick: roundTrickName.trim(),
+      setterId: selectedSetterCardId,
+      trick: trickDraft.trim(),
       statuses,
     };
 
     setCurrentRound(nextRound);
     setSelectedSetterCardId('');
-    setIsRoundModalOpen(false);
+    setTrickDraft('');
+    setIsChoosingNextRound(false);
   };
 
   const setSkaterStatus = (playerId: string, status: Exclude<RoundStatus, null>) => {
@@ -275,9 +302,7 @@ export default function SkatePage() {
     const aliveAfterRound = updatedPlayersSnapshot.filter((player) => !player.eliminated);
     if (aliveAfterRound.length <= 1) return;
 
-    setRoundSetterId(aliveAfterRound[0]?.id ?? '');
-    setRoundTrickName('');
-    setIsRoundModalOpen(true);
+    setIsChoosingNextRound(true);
   };
 
   const restartWithSamePlayers = () => {
@@ -290,28 +315,12 @@ export default function SkatePage() {
     setRounds([]);
     setCurrentRound(null);
     setShowAllSkaters(false);
-    setIsRoundModalOpen(false);
-    setRoundSetterId('');
-    setRoundTrickName('');
     setSelectedSetterCardId('');
+    setTrickDraft('');
+    setIsChoosingNextRound(false);
     setStartingPlayerName('');
     setRpsLabel('🪨 Piedra...');
   };
-
-  const playerStats = useMemo(() => {
-    return players.map((player) => {
-      const tricksSet = rounds.filter((round) => round.setterId === player.id).map((round) => round.trick);
-      const falloCount = rounds.reduce((acc, round) => (round.statuses[player.id] === 'fallo' ? acc + 1 : acc), 0);
-      const logroCount = rounds.reduce((acc, round) => (round.statuses[player.id] === 'logro' ? acc + 1 : acc), 0);
-
-      return {
-        ...player,
-        tricksSet,
-        falloCount,
-        logroCount,
-      };
-    });
-  }, [players, rounds]);
 
   const winnerStats = winner ? playerStats.find((player) => player.id === winner.id) : null;
 
@@ -404,7 +413,7 @@ export default function SkatePage() {
           {!winner && (
             <button
               type="button"
-              onClick={currentRound ? finalizeCurrentRound : () => openRoundModal()}
+              onClick={currentRound ? finalizeCurrentRound : openRoundChooser}
               disabled={Boolean(currentRound && !isCurrentRoundComplete)}
               className="w-full rounded-xl bg-indigo-600 px-4 py-4 text-lg font-bold text-white disabled:opacity-40"
             >
@@ -412,7 +421,7 @@ export default function SkatePage() {
             </button>
           )}
 
-          {!currentRound && !winner && (
+          {isChoosingNextRound && !currentRound && !winner && (
             <div className="space-y-3 rounded-2xl border border-white/10 bg-black/30 p-4">
               <p className="text-center text-sm font-semibold text-white/80">Orden final (elige quién puso el truco)</p>
               <div className="space-y-2">
@@ -420,6 +429,9 @@ export default function SkatePage() {
                   const player = playersById.get(playerId);
                   if (!player) return null;
                   const isSelected = selectedSetterCardId === player.id;
+                  const isLeader = leaderId === player.id;
+                  const isLastSetter = lastRound?.setterId === player.id;
+
                   return (
                     <div
                       key={player.id}
@@ -440,21 +452,40 @@ export default function SkatePage() {
                             : 'cursor-pointer border-white/10 bg-black/30'
                       }`}
                     >
-                      <p className="font-semibold">
-                        {index + 1}. {player.name} {player.eliminated ? '💀' : ''}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold">
+                          {index + 1}. {player.name} {player.eliminated ? '💀' : ''}
+                        </p>
+                        {isLeader && <span className="rounded-full bg-yellow-400/20 px-2 py-0.5 text-xs text-yellow-200">🏆 Va ganando</span>}
+                        {isLastSetter && (
+                          <span className="rounded-full bg-indigo-400/20 px-2 py-0.5 text-xs text-indigo-100">
+                            Puso {lastRound?.trick}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm text-white/70">{lettersForCount(player.letterCount)}</p>
+
                       {isSelected && !player.eliminated && (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openRoundModal(player.id);
-                          }}
-                          className="mt-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-bold"
-                        >
-                          Puso truco 🛹
-                        </button>
+                        <div className="mt-2 space-y-2">
+                          <input
+                            type="text"
+                            value={trickDraft}
+                            onChange={(event) => setTrickDraft(event.target.value)}
+                            placeholder="Nombre del truco"
+                            className="w-full rounded-lg border border-white/15 bg-black/35 px-3 py-2 text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              startNextRound();
+                            }}
+                            disabled={!trickDraft.trim()}
+                            className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-bold disabled:opacity-40"
+                          >
+                            Puso truco 🛹
+                          </button>
+                        </div>
                       )}
                     </div>
                   );
@@ -525,15 +556,20 @@ export default function SkatePage() {
           {showAllSkaters && (
             <div className="rounded-xl border border-white/10 bg-black/25 p-4 text-sm">
               <ul className="space-y-3">
-                {playerStats.map((player) => (
-                  <li key={player.id} className="rounded-lg border border-white/10 p-3">
-                    <p className="font-semibold">
-                      {player.name} {player.eliminated ? '💀' : ''}
-                    </p>
-                    <p className="text-white/75">Trucos que puso: {player.tricksSet.length ? player.tricksSet.join(', ') : '—'}</p>
-                    <p className="text-white/75">Falló: {player.falloCount} · Logró: {player.logroCount}</p>
-                  </li>
-                ))}
+                {turnOrder.map((playerId, index) => {
+                  const player = playerStatsById.get(playerId);
+                  if (!player) return null;
+                  const isLeader = leaderId === player.id;
+                  return (
+                    <li key={player.id} className="rounded-lg border border-white/10 p-3">
+                      <p className="font-semibold">
+                        {index + 1}. {player.name} {player.eliminated ? '💀' : ''} {isLeader ? '🏆' : ''}
+                      </p>
+                      <p className="text-white/75">Trucos que puso: {player.tricksSet.length ? player.tricksSet.join(', ') : '—'}</p>
+                      <p className="text-white/75">Falló: {player.falloCount} · Logró: {player.logroCount}</p>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
@@ -559,59 +595,6 @@ export default function SkatePage() {
           >
             Iniciar nuevo juego
           </button>
-        </div>
-      )}
-
-      {isRoundModalOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4">
-          <div className="w-full max-w-md space-y-4 rounded-2xl border border-white/15 bg-[#0d1020] p-5">
-            <h3 className="text-xl font-black">Nueva ronda</h3>
-            <p className="text-sm text-white/70">Selecciona quién pone el truco y escribe el nombre del truco.</p>
-
-            <div className="space-y-2">
-              <label className="text-xs uppercase tracking-[0.14em] text-white/60">Skater que pone el truco</label>
-              <select
-                value={roundSetterId}
-                onChange={(event) => setRoundSetterId(event.target.value)}
-                className="w-full rounded-lg border border-white/15 bg-black/35 px-3 py-2"
-              >
-                {remainingPlayers.map((player) => (
-                  <option key={player.id} value={player.id}>
-                    {player.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs uppercase tracking-[0.14em] text-white/60">Nombre del truco</label>
-              <input
-                type="text"
-                value={roundTrickName}
-                onChange={(event) => setRoundTrickName(event.target.value)}
-                placeholder="Ej: Kickflip"
-                className="w-full rounded-lg border border-white/15 bg-black/35 px-3 py-2"
-              />
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setIsRoundModalOpen(false)}
-                className="w-full rounded-lg border border-white/20 px-3 py-2 text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={startNextRound}
-                disabled={!roundSetterId || !roundTrickName.trim()}
-                className="w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-40"
-              >
-                OK 🛹
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </section>
