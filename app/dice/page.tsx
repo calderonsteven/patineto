@@ -27,7 +27,8 @@ type DiceResult = {
 type RollDynamics = {
   durationMs: number;
   staggerMs: number;
-  baseRotationDeg: number;
+  baseSpinDeg: number;
+  tiltDeg: number;
   shakePx: number;
 };
 
@@ -115,11 +116,20 @@ function pickDifficulty(baseDifficulty: Difficulty): Difficulty {
   return baseDifficulty;
 }
 
+const defaultRollDynamics: RollDynamics = {
+  durationMs: 1650,
+  staggerMs: 110,
+  baseSpinDeg: 1620,
+  tiltDeg: 16,
+  shakePx: 7,
+};
+
 function buildRollDynamics(): RollDynamics {
   return {
     durationMs: randomInt(1500, 1800),
     staggerMs: randomInt(90, 130),
-    baseRotationDeg: randomInt(1300, 1900),
+    baseSpinDeg: randomInt(1260, 1980),
+    tiltDeg: randomInt(12, 20),
     shakePx: randomInt(6, 9),
   };
 }
@@ -128,7 +138,7 @@ export default function DicePage() {
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>('principiante');
   const [isRolling, setIsRolling] = useState(false);
   const [rollId, setRollId] = useState(0);
-  const [dynamics, setDynamics] = useState<RollDynamics>(buildRollDynamics);
+  const [dynamics, setDynamics] = useState<RollDynamics>(defaultRollDynamics);
   const [result, setResult] = useState<DiceResult | null>(null);
   const [preview, setPreview] = useState<Omit<DiceResult, 'adaptedDifficulty'> | null>(null);
 
@@ -231,7 +241,7 @@ export default function DicePage() {
         <article className="rounded-xl border border-deck-700 bg-deck-800 p-6">
           <h2 className="text-xl font-semibold">2) Resultado</h2>
 
-          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="mt-5 grid grid-cols-1 gap-3 [perspective:1100px] sm:grid-cols-3">
             {tileLabels.map((label, index) => {
               const previewValue =
                 label === 'Postura'
@@ -248,24 +258,32 @@ export default function DicePage() {
                     : result?.trick.name;
 
               const value = isRolling ? previewValue ?? '...' : finalValue ?? '—';
+              const spinX = dynamics.baseSpinDeg + index * 120;
+              const spinY = dynamics.baseSpinDeg - index * 85;
+              const spinZ = Math.round(dynamics.baseSpinDeg * 0.45) + index * 45;
 
               return (
                 <motion.div
                   key={`${label}-${rollId}`}
-                  className="rounded-lg border border-deck-700 bg-deck-900/70 p-4 text-center"
+                  className="rounded-lg border border-deck-700 bg-deck-900/70 p-4 text-center [transform-style:preserve-3d]"
+                  style={{ transformPerspective: 1100, transformOrigin: '50% 50%' }}
                   initial={false}
                   animate={
                     isRolling
                       ? {
                           x: [0, dynamics.shakePx, -dynamics.shakePx, dynamics.shakePx * 0.6, 0],
-                          y: [0, -3, 2, -1, 0],
-                          rotateZ: [0, dynamics.baseRotationDeg + index * 120],
-                          scale: [1, 1.06, 1.02, 1],
+                          y: [0, -8, 5, -2, 0],
+                          rotateX: [0, spinX, spinX + dynamics.tiltDeg],
+                          rotateY: [0, spinY, spinY - dynamics.tiltDeg],
+                          rotateZ: [0, spinZ],
+                          scale: [1, 1.06, 1.01, 1],
                           filter: ['blur(0px)', 'blur(2px)', 'blur(1px)', 'blur(0px)'],
                         }
                       : {
                           x: 0,
                           y: 0,
+                          rotateX: [dynamics.tiltDeg * 0.4, -dynamics.tiltDeg * 0.2, 0],
+                          rotateY: [-dynamics.tiltDeg * 0.4, dynamics.tiltDeg * 0.2, 0],
                           rotateZ: 0,
                           scale: [1.02, 0.99, 1],
                           filter: 'blur(0px)',
@@ -277,10 +295,9 @@ export default function DicePage() {
                           duration: dynamics.durationMs / 1000,
                           delay: (index * dynamics.staggerMs) / 1000,
                           ease: [0.22, 1, 0.36, 1],
-                          times: [0, 0.15, 0.5, 0.82, 1],
                         }
                       : {
-                          duration: 0.22,
+                          duration: 0.28,
                           ease: 'easeOut',
                         }
                   }
