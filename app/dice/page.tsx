@@ -32,6 +32,20 @@ type RollDynamics = {
   shakePx: number;
 };
 
+function adaptDynamicsForViewport(dynamics: RollDynamics) {
+  if (typeof window === 'undefined' || window.innerWidth >= 640) {
+    return dynamics;
+  }
+
+  return {
+    durationMs: Math.max(1350, dynamics.durationMs - 180),
+    staggerMs: Math.max(70, dynamics.staggerMs - 25),
+    baseSpinDeg: Math.max(1080, dynamics.baseSpinDeg - 220),
+    tiltDeg: Math.max(9, dynamics.tiltDeg - 3),
+    shakePx: Math.max(4, dynamics.shakePx - 2),
+  };
+}
+
 const trickPools: Record<Difficulty, DiceSet> = {
   principiante: {
     stance: ['Regular', 'Fakie'],
@@ -149,7 +163,7 @@ export default function DicePage() {
       return;
     }
 
-    const nextDynamics = buildRollDynamics();
+    const nextDynamics = adaptDynamicsForViewport(buildRollDynamics());
     const adaptedDifficulty = pickDifficulty(selectedDifficulty);
     const pool = trickPools[adaptedDifficulty];
 
@@ -184,18 +198,18 @@ export default function DicePage() {
   const tileLabels = ['Postura', 'Obstáculo', 'Truco'] as const;
 
   return (
-    <section className="space-y-8">
+    <section className="space-y-6 sm:space-y-8">
       <header className="space-y-2">
         <p className="text-sm uppercase tracking-[0.2em] text-deck-200">Módulo</p>
-        <h1 className="text-3xl font-bold tracking-tight">Juego de Dados</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Juego de Dados</h1>
         <p className="max-w-3xl text-deck-200">
           Elige una dificultad y lanza los dados para generar un reto de skate con postura, obstáculo y truco.
           Ajustamos automáticamente la complejidad para mantener variedad sin romper tu nivel.
         </p>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
-        <article className="rounded-xl border border-deck-700 bg-deck-800 p-6">
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-[1fr_1.2fr]">
+        <article className="rounded-xl border border-deck-700 bg-deck-800 p-4 sm:p-6">
           <h2 className="text-xl font-semibold">1) Selecciona dificultad</h2>
           <div className="mt-4 space-y-3">
             {difficulties.map((difficulty) => (
@@ -228,7 +242,7 @@ export default function DicePage() {
             type="button"
             onClick={rollDice}
             disabled={isRolling}
-            className="mt-6 inline-flex items-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-deck-900 transition hover:bg-deck-200 disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-6 inline-flex w-full items-center justify-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-deck-900 transition hover:bg-deck-200 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
             {isRolling ? 'Girando dados...' : 'Lanzar dados'}
           </button>
@@ -238,10 +252,10 @@ export default function DicePage() {
           </p>
         </article>
 
-        <article className="rounded-xl border border-deck-700 bg-deck-800 p-6">
+        <article className="rounded-xl border border-deck-700 bg-deck-800 p-4 sm:p-6">
           <h2 className="text-xl font-semibold">2) Resultado</h2>
 
-          <div className="mt-5 grid grid-cols-1 gap-3 [perspective:1100px] sm:grid-cols-3">
+          <div className="mt-5 grid grid-cols-3 gap-2 [perspective:900px] sm:gap-3 sm:[perspective:1100px]">
             {tileLabels.map((label, index) => {
               const previewValue =
                 label === 'Postura'
@@ -265,7 +279,7 @@ export default function DicePage() {
               return (
                 <motion.div
                   key={`${label}-${rollId}`}
-                  className="rounded-lg border border-deck-700 bg-deck-900/70 p-4 text-center [transform-style:preserve-3d]"
+                  className="min-h-24 rounded-lg border border-deck-700 bg-deck-900/70 p-3 text-center [transform-style:preserve-3d] sm:min-h-0 sm:p-4"
                   style={{ transformPerspective: 1100, transformOrigin: '50% 50%' }}
                   initial={false}
                   animate={
@@ -302,8 +316,8 @@ export default function DicePage() {
                         }
                   }
                 >
-                  <p className="text-xs uppercase tracking-[0.2em] text-deck-200">{label}</p>
-                  <p className="mt-2 text-sm font-semibold text-white">{value}</p>
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-deck-200 sm:text-xs sm:tracking-[0.2em]">{label}</p>
+                  <p className="mt-2 text-xs font-semibold text-white sm:text-sm">{value}</p>
                 </motion.div>
               );
             })}
