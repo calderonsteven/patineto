@@ -121,14 +121,20 @@ export default function SkatePage() {
   const playerStats = useMemo(() => {
     return players.map((player) => {
       const tricksSet = rounds.filter((round) => round.setterId === player.id).map((round) => round.trick);
-      const falloCount = rounds.reduce((acc, round) => (round.statuses[player.id] === 'fallo' ? acc + 1 : acc), 0);
-      const logroCount = rounds.reduce((acc, round) => (round.statuses[player.id] === 'logro' ? acc + 1 : acc), 0);
+      const failedTricks = rounds
+        .filter((round) => round.statuses[player.id] === 'fallo')
+        .map((round) => `${round.trick} (R${round.number})`);
+      const landedTricks = rounds
+        .filter((round) => round.statuses[player.id] === 'logro')
+        .map((round) => `${round.trick} (R${round.number})`);
 
       return {
         ...player,
         tricksSet,
-        falloCount,
-        logroCount,
+        failedTricks,
+        landedTricks,
+        falloCount: failedTricks.length,
+        logroCount: landedTricks.length,
       };
     });
   }, [players, rounds]);
@@ -554,19 +560,60 @@ export default function SkatePage() {
           </button>
 
           {showAllSkaters && (
-            <div className="rounded-xl border border-white/10 bg-black/25 p-4 text-sm">
-              <ul className="space-y-3">
+            <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-black/35 to-black/20 p-4 text-sm">
+              <ul className="space-y-4">
                 {turnOrder.map((playerId, index) => {
                   const player = playerStatsById.get(playerId);
                   if (!player) return null;
                   const isLeader = leaderId === player.id;
+
                   return (
-                    <li key={player.id} className="rounded-lg border border-white/10 p-3">
-                      <p className="font-semibold">
-                        {index + 1}. {player.name} {player.eliminated ? '💀' : ''} {isLeader ? '🏆' : ''}
-                      </p>
-                      <p className="text-white/75">Trucos que puso: {player.tricksSet.length ? player.tricksSet.join(', ') : '—'}</p>
-                      <p className="text-white/75">Falló: {player.falloCount} · Logró: {player.logroCount}</p>
+                    <li key={player.id} className="rounded-xl border border-white/10 bg-black/35 p-4 shadow-lg shadow-black/20">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-base font-bold">
+                          {index + 1}. {player.name} {player.eliminated ? '💀' : ''}
+                        </p>
+                        {isLeader && (
+                          <span className="rounded-full bg-yellow-400/20 px-2.5 py-0.5 text-xs font-bold text-yellow-200">
+                            🏆 Va ganando
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                        <div className="rounded-lg border border-indigo-400/25 bg-indigo-500/10 p-3">
+                          <p className="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-indigo-200">Trucos que puso</p>
+                          <ul className="list-disc space-y-1 pl-4 text-white/90">
+                            {player.tricksSet.length ? (
+                              player.tricksSet.map((trick) => <li key={`${player.id}-set-${trick}`}>{trick}</li>)
+                            ) : (
+                              <li className="list-none pl-0 text-white/50">Aún no puso trucos.</li>
+                            )}
+                          </ul>
+                        </div>
+
+                        <div className="rounded-lg border border-red-400/25 bg-red-500/10 p-3">
+                          <p className="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-red-200">Falló ({player.falloCount})</p>
+                          <ul className="list-disc space-y-1 pl-4 text-white/90">
+                            {player.failedTricks.length ? (
+                              player.failedTricks.map((trick) => <li key={`${player.id}-fail-${trick}`}>{trick}</li>)
+                            ) : (
+                              <li className="list-none pl-0 text-white/50">Sin fallos registrados.</li>
+                            )}
+                          </ul>
+                        </div>
+
+                        <div className="rounded-lg border border-emerald-400/25 bg-emerald-500/10 p-3">
+                          <p className="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-emerald-200">Logró ({player.logroCount})</p>
+                          <ul className="list-disc space-y-1 pl-4 text-white/90">
+                            {player.landedTricks.length ? (
+                              player.landedTricks.map((trick) => <li key={`${player.id}-land-${trick}`}>{trick}</li>)
+                            ) : (
+                              <li className="list-none pl-0 text-white/50">Sin logros registrados.</li>
+                            )}
+                          </ul>
+                        </div>
+                      </div>
                     </li>
                   );
                 })}
