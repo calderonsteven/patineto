@@ -1,503 +1,498 @@
 'use client';
 
-import { TrickVideo } from '@/components/youtube/trick-video';
 import { useEffect, useMemo, useState } from 'react';
 
 type Player = {
   id: string;
   name: string;
-  letterCount: number;
-  eliminated?: boolean;
+  letterCount: number; // 0–5
+  eliminated: boolean;
 };
 
+type RoundResult = 'CAYÓ' | 'LO LOGRÓ';
+
+type GameState = {
+  players: Player[];
+  turnOrder: string[]; // player ids in order
+  currentTurnIndex: number; // index in turnOrder
+  currentTrick: string;
+  history: { trick: string; player: string; result: RoundResult }[];
+};
+
+type Phase = 'setup' | 'order' | 'starting' | 'play';
+
 const LETTERS = ['S', 'K', 'A', 'T', 'E'] as const;
-const PLAYERS_STORAGE_KEY = 'patineto-skate-players';
+const STORAGE_KEY = 'patineto-skate-rapid-v1';
+
+const createId = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 const createPlayer = (name: string): Player => ({
-  id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
-  name,
+  id: createId(),
+  name: name.trim(),
   letterCount: 0,
   eliminated: false,
 });
 
-const getSafePlayerName = (value: string, fallbackIndex: number) => value.trim() || `Player ${fallbackIndex + 1}`;
+const shuffle = <T,>(items: T[]) => {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+};
+
+const clampLetterCount = (value: number) => Math.max(0, Math.min(5, value));
+
+const lettersForCount = (count: number) =>
+  LETTERS.map((letter, index) => (index < count ? letter : '_')).join(' ');
 
 export default function SkatePage() {
-  const [players, setPlayers] = useState<Player[]>([createPlayer('Player 1'), createPlayer('Player 2')]);
+  const [phase, setPhase] = useState<Phase>('setup');
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [turnOrder, setTurnOrder] = useState<string[]>([]);
+  const [currentTurnIndex, setCurrentTurnIndex] = useState(0);
+  const [currentTrick, setCurrentTrick] = useState('Ollie');
+  const [history, setHistory] = useState<GameState['history']>([]);
   const [newPlayerName, setNewPlayerName] = useState('');
-  const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
-  const [trickInput, setTrickInput] = useState('');
-  const [currentTrick, setCurrentTrick] = useState('');
-  const [trickHistory, setTrickHistory] = useState<string[]>([]);
-  const [eliminationMode, setEliminationMode] = useState(false);
-  const [gameStarted, setGameStarted] = useState(false);
-  const [winnerId, setWinnerId] = useState<string | null>(null);
-  const [lastFailedPlayerId, setLastFailedPlayerId] = useState<string | null>(null);
+  const [isEditingTrick, setIsEditingTrick] = useState(false);
+  const [trickDraft, setTrickDraft] = useState('');
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [startingPlayerName, setStartingPlayerName] = useState('');
+  const [rpsLabel, setRpsLabel] = useState('Piedra...');
 
   useEffect(() => {
-    const saved = localStorage.getItem(PLAYERS_STORAGE_KEY);
-
-    if (!saved) {
-      return;
-    }
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
 
     try {
-      const parsed = JSON.parse(saved) as Player[];
-      if (!Array.isArray(parsed) || parsed.length === 0) {
-        return;
+      const parsed = JSON.parse(raw) as {
+        phase?: Phase;
+        game?: GameState;
+      };
+
+      const safePlayers = Array.isArray(parsed.game?.players)
+        ? parsed.game.players.map((player, index) => ({
+            id: player.id || createId(),
+            name: player.name?.trim() || `Player ${index + 1}`,
+            letterCount: clampLetterCount(Number(player.letterCount) || 0),
+            eliminated: Boolean(player.eliminated) || clampLetterCount(Number(player.letterCount) || 0) >= 5,
+          }))
+        : [];
+
+      setPlayers(safePlayers);
+      setTurnOrder(Array.isArray(parsed.game?.turnOrder) ? parsed.game?.turnOrder.filter(Boolean) : []);
+      setCurrentTurnIndex(Math.max(0, Number(parsed.game?.currentTurnIndex) || 0));
+      setCurrentTrick(typeof parsed.game?.currentTrick === 'string' ? parsed.game.currentTrick : 'Ollie');
+      setHistory(Array.isArray(parsed.game?.history) ? parsed.game.history : []);
+
+      if (parsed.phase && ['setup', 'order', 'starting', 'play'].includes(parsed.phase)) {
+        setPhase(parsed.phase);
       }
-
-      const hydratedPlayers = parsed.map((player, index) => ({
-        id: player.id || createPlayer('').id,
-        name: getSafePlayerName(player.name || '', index),
-        letterCount: Number.isFinite(player.letterCount) ? Math.min(Math.max(player.letterCount, 0), 5) : 0,
-        eliminated: Boolean(player.eliminated),
-      }));
-
-      setPlayers(hydratedPlayers);
-      setCurrentPlayerIndex(0);
     } catch {
-      // Ignore invalid localStorage value.
+      localStorage.removeItem(STORAGE_KEY);
     }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(PLAYERS_STORAGE_KEY, JSON.stringify(players));
-  }, [players]);
+    const game: GameState = {
+      players,
+      turnOrder,
+      currentTurnIndex,
+      currentTrick,
+      history,
+    };
 
-  useEffect(() => {
-    if (!lastFailedPlayerId) {
-      return;
-    }
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        phase,
+        game,
+      }),
+    );
+  }, [phase, players, turnOrder, currentTurnIndex, currentTrick, history]);
 
-    const timeout = setTimeout(() => {
-      setLastFailedPlayerId(null);
-    }, 550);
+  const playersById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
 
-    return () => clearTimeout(timeout);
-  }, [lastFailedPlayerId]);
-
-  const activePlayers = useMemo(() => players.filter((player) => !player.eliminated), [players]);
-
-  const currentPlayer = activePlayers[currentPlayerIndex] ?? null;
-
-  const alivePlayers = useMemo(() => activePlayers.filter((player) => player.letterCount < 5), [activePlayers]);
-
-  const sortedByRisk = useMemo(
-    () => [...activePlayers].sort((a, b) => b.letterCount - a.letterCount || a.name.localeCompare(b.name)),
-    [activePlayers],
-  );
-
-  const trickAlreadyUsed = useMemo(
-    () => trickInput.trim().length > 0 && trickHistory.some((trick) => trick.toLowerCase() === trickInput.trim().toLowerCase()),
-    [trickHistory, trickInput],
+  const activeTurnOrder = useMemo(
+    () => turnOrder.filter((playerId) => {
+      const player = playersById.get(playerId);
+      return Boolean(player && !player.eliminated);
+    }),
+    [playersById, turnOrder],
   );
 
   useEffect(() => {
-    if (activePlayers.length === 0) {
-      setWinnerId(null);
-      return;
-    }
+    if (phase !== 'starting') return;
+    if (!turnOrder.length) return;
 
-    if (alivePlayers.length === 1 && players.length >= 2) {
-      setWinnerId(alivePlayers[0].id);
-      setGameStarted(true);
-      return;
-    }
+    const sequence = ['Piedra...', 'Papel...', 'Tijera...'];
+    sequence.forEach((label, index) => {
+      setTimeout(() => setRpsLabel(label), index * 450);
+    });
 
-    setWinnerId(null);
-  }, [alivePlayers, activePlayers.length, players.length]);
+    const finalTimeout = setTimeout(() => {
+      const randomId = turnOrder[Math.floor(Math.random() * turnOrder.length)];
+      const starterIndex = turnOrder.findIndex((id) => id === randomId);
+      const starterName = playersById.get(randomId)?.name || 'Jugador';
+      setCurrentTurnIndex(Math.max(0, starterIndex));
+      setStartingPlayerName(starterName);
+      setRpsLabel('¡Listo!');
 
-  useEffect(() => {
-    if (currentPlayerIndex <= activePlayers.length - 1) {
-      return;
-    }
+      setTimeout(() => {
+        setPhase('play');
+      }, 1000);
+    }, 1500);
 
-    setCurrentPlayerIndex(activePlayers.length > 0 ? 0 : 0);
-  }, [activePlayers.length, currentPlayerIndex]);
+    return () => {
+      clearTimeout(finalTimeout);
+    };
+  }, [phase, turnOrder, playersById]);
 
-  const canStartRound = activePlayers.length >= 2;
+  const currentPlayerId = turnOrder[currentTurnIndex];
+  const currentPlayer = currentPlayerId ? playersById.get(currentPlayerId) : null;
+
+  const nextPlayerPreview = useMemo(() => {
+    if (!activeTurnOrder.length || !currentPlayerId) return null;
+    const indexInActive = activeTurnOrder.findIndex((id) => id === currentPlayerId);
+    const nextId = activeTurnOrder[(indexInActive + 1) % activeTurnOrder.length] ?? activeTurnOrder[0];
+    return playersById.get(nextId) ?? null;
+  }, [activeTurnOrder, currentPlayerId, playersById]);
+
+  const remainingPlayers = useMemo(() => players.filter((player) => !player.eliminated), [players]);
 
   const addPlayer = () => {
-    const cleanName = getSafePlayerName(newPlayerName, players.length);
-    setPlayers((prev) => [...prev, createPlayer(cleanName)]);
+    const name = newPlayerName.trim();
+    if (!name) return;
+    setPlayers((prev) => [...prev, createPlayer(name)]);
     setNewPlayerName('');
   };
 
-  const removePlayer = (id: string) => {
-    setPlayers((prev) => prev.filter((player) => player.id !== id));
-    setCurrentPlayerIndex(0);
-  };
-
-  const updatePlayerName = (id: string, name: string) => {
+  const updatePlayer = (id: string, name: string) => {
     setPlayers((prev) => prev.map((player) => (player.id === id ? { ...player, name } : player)));
   };
 
-  const commitPlayerName = (id: string) => {
+  const commitPlayerName = (id: string, index: number) => {
     setPlayers((prev) =>
-      prev.map((player, index) =>
-        player.id === id ? { ...player, name: getSafePlayerName(player.name, index) } : player,
+      prev.map((player) =>
+        player.id === id ? { ...player, name: player.name.trim() || `Player ${index + 1}` } : player,
       ),
     );
   };
 
-  const nextTurn = () => {
-    if (activePlayers.length <= 1 || winnerId) {
-      return;
-    }
+  const startGame = () => {
+    if (players.length < 2) return;
+    const cleanPlayers = players.map((player, index) => ({
+      ...player,
+      name: player.name.trim() || `Player ${index + 1}`,
+      letterCount: 0,
+      eliminated: false,
+    }));
 
-    setGameStarted(true);
-    setCurrentPlayerIndex((prev) => (prev + 1) % activePlayers.length);
+    const order = shuffle(cleanPlayers.map((player) => player.id));
+
+    setPlayers(cleanPlayers);
+    setTurnOrder(order);
+    setCurrentTurnIndex(0);
+    setCurrentTrick('Ollie');
+    setTrickDraft('Ollie');
+    setHistory([]);
+    setHistoryOpen(false);
+    setPhase('order');
+
+    setTimeout(() => {
+      setPhase('starting');
+    }, 900);
   };
 
-  const failCurrentPlayer = () => {
-    if (!currentPlayer || winnerId) {
+  const moveToNextActivePlayer = (order: string[], fromPlayerId: string | undefined, allPlayers: Player[]) => {
+    if (!fromPlayerId) {
+      setCurrentTurnIndex(0);
       return;
     }
 
-    setGameStarted(true);
-    setLastFailedPlayerId(currentPlayer.id);
+    const aliveIds = order.filter((id) => {
+      const player = allPlayers.find((item) => item.id === id);
+      return Boolean(player && !player.eliminated);
+    });
+
+    if (aliveIds.length <= 1) {
+      const winnerId = aliveIds[0];
+      const winnerIndex = winnerId ? order.findIndex((id) => id === winnerId) : 0;
+      setCurrentTurnIndex(Math.max(0, winnerIndex));
+      return;
+    }
+
+    const currentAliveIndex = aliveIds.findIndex((id) => id === fromPlayerId);
+    const nextAliveId = aliveIds[(currentAliveIndex + 1) % aliveIds.length] ?? aliveIds[0];
+    const globalIndex = order.findIndex((id) => id === nextAliveId);
+    setCurrentTurnIndex(Math.max(0, globalIndex));
+  };
+
+  const applyTurnResult = (result: RoundResult) => {
+    if (!currentPlayer) return;
+
+    const beforePlayerName = currentPlayer.name;
+    const trickUsed = currentTrick.trim() || 'Truco libre';
 
     setPlayers((prev) => {
       const updated = prev.map((player) => {
-        if (player.id !== currentPlayer.id) {
-          return player;
-        }
+        if (player.id !== currentPlayer.id) return player;
+        if (result !== 'CAYÓ') return player;
 
-        const newCount = Math.min(player.letterCount + 1, 5);
-        const reachesSkate = newCount >= 5;
-
+        const nextCount = clampLetterCount(player.letterCount + 1);
         return {
           ...player,
-          letterCount: newCount,
-          eliminated: eliminationMode ? reachesSkate : player.eliminated,
+          letterCount: nextCount,
+          eliminated: nextCount >= 5,
         };
       });
 
+      moveToNextActivePlayer(turnOrder, currentPlayer.id, updated);
       return updated;
     });
 
-    const projectedPlayers = players.map((player) => {
-      if (player.id !== currentPlayer.id) {
-        return player;
-      }
-
-      const nextCount = Math.min(player.letterCount + 1, 5);
-      return {
-        ...player,
-        letterCount: nextCount,
-        eliminated: eliminationMode ? nextCount >= 5 : player.eliminated,
-      };
-    });
-
-    const projectedActive = projectedPlayers.filter((player) => !player.eliminated);
-
-    if (projectedActive.length > 1) {
-      const currentIndex = projectedActive.findIndex((player) => player.id === currentPlayer.id);
-      if (currentIndex >= 0) {
-        setCurrentPlayerIndex((currentIndex + 1) % projectedActive.length);
-      } else {
-        setCurrentPlayerIndex(currentPlayerIndex % projectedActive.length);
-      }
-    } else {
-      setCurrentPlayerIndex(0);
-    }
+    setHistory((prev) => [...prev, { trick: trickUsed, player: beforePlayerName, result }]);
   };
 
-  const submitTrick = () => {
-    const cleanTrick = trickInput.trim();
-
-    if (!cleanTrick) {
-      return;
-    }
-
-    setCurrentTrick(cleanTrick);
-    setTrickHistory((prev) => [...prev, cleanTrick]);
-    setGameStarted(true);
-  };
-
-  const resetGameKeepPlayers = () => {
+  const resetRound = () => {
     setPlayers((prev) => prev.map((player) => ({ ...player, letterCount: 0, eliminated: false })));
-    setCurrentPlayerIndex(0);
-    setCurrentTrick('');
-    setTrickInput('');
-    setTrickHistory([]);
-    setGameStarted(false);
-    setWinnerId(null);
-    setLastFailedPlayerId(null);
+    setCurrentTurnIndex(0);
+    setCurrentTrick('Ollie');
+    setTrickDraft('Ollie');
+    setHistory([]);
+    setPhase(turnOrder.length ? 'play' : 'setup');
   };
 
   const newGame = () => {
+    setPhase('setup');
     setPlayers([]);
+    setTurnOrder([]);
+    setCurrentTurnIndex(0);
+    setCurrentTrick('Ollie');
+    setTrickDraft('');
+    setHistory([]);
     setNewPlayerName('');
-    setCurrentPlayerIndex(0);
-    setCurrentTrick('');
-    setTrickInput('');
-    setTrickHistory([]);
-    setGameStarted(false);
-    setWinnerId(null);
-    setLastFailedPlayerId(null);
-    setEliminationMode(false);
-    localStorage.removeItem(PLAYERS_STORAGE_KEY);
+    setHistoryOpen(false);
+    setStartingPlayerName('');
+    setRpsLabel('Piedra...');
+    localStorage.removeItem(STORAGE_KEY);
   };
 
+  const gameHasWinner = phase === 'play' && remainingPlayers.length === 1;
+  const winner = gameHasWinner ? remainingPlayers[0] : null;
+
   return (
-    <section className="mx-auto flex w-full max-w-5xl flex-col gap-6 pb-10">
-      <header className="neo-panel space-y-2 p-5 text-center sm:p-6">
-        <p className="text-sm uppercase tracking-[0.2em] text-hype-pink">Módulo</p>
-        <h1 className="text-3xl font-black tracking-tight">Juego de S.K.A.T.E</h1>
-        <p className="text-sm text-deck-300">Multijugador local: agrega nombres y juega por turnos.</p>
-      </header>
+    <section className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-4 py-8">
+      {phase === 'setup' && (
+        <div className="space-y-5">
+          <h1 className="text-center text-3xl font-black">Juego de S.K.A.T.E</h1>
+          <p className="text-center text-sm text-deck-300">Agrega al menos 2 jugadores para comenzar.</p>
 
-      <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-        <div className="space-y-6">
-          <article className="neo-panel space-y-4 p-5 sm:p-6">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xl font-semibold">Jugadores</h2>
-              <span className="text-xs text-deck-300">Mínimo 2 para jugar</span>
-            </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              type="text"
+              value={newPlayerName}
+              onChange={(event) => setNewPlayerName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  addPlayer();
+                }
+              }}
+              placeholder="Nombre del jugador"
+              className="w-full rounded-lg border border-white/15 bg-black/35 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              type="button"
+              onClick={addPlayer}
+              className="rounded-lg border border-indigo-400/40 bg-indigo-500/20 px-4 py-2 font-semibold text-indigo-100"
+            >
+              Añadir
+            </button>
+          </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="space-y-2">
+            {players.map((player, index) => (
               <input
+                key={player.id}
                 type="text"
-                value={newPlayerName}
-                onChange={(event) => setNewPlayerName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    addPlayer();
-                  }
-                }}
-                placeholder="Añadir jugador"
-                className="w-full rounded-md border border-white/20 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-deck-300 focus:border-hype-cyan focus:outline-none"
+                value={player.name}
+                onChange={(event) => updatePlayer(player.id, event.target.value)}
+                onBlur={() => commitPlayerName(player.id, index)}
+                className="w-full rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
-              <button
-                type="button"
-                onClick={addPlayer}
-                className="rounded-md border border-hype-cyan/40 bg-hype-cyan/15 px-4 py-2 text-sm font-semibold text-hype-cyan transition hover:bg-hype-cyan/25"
-              >
-                Añadir
-              </button>
-            </div>
+            ))}
+          </div>
 
-            <ul className="space-y-2">
-              {players.length === 0 && <li className="text-sm text-deck-300">No hay jugadores todavía.</li>}
-              {players.map((player, index) => {
-                const isActive = currentPlayer?.id === player.id;
-                const isWinner = winnerId === player.id;
+          <button
+            type="button"
+            onClick={startGame}
+            disabled={players.length < 2}
+            className="w-full rounded-xl bg-indigo-600 px-4 py-4 text-lg font-bold text-white disabled:opacity-40"
+          >
+            Iniciar juego
+          </button>
+        </div>
+      )}
+
+      {phase === 'order' && (
+        <div className="space-y-5 text-center">
+          <h2 className="text-2xl font-bold">Orden de turnos</h2>
+          <div className="flex flex-wrap justify-center gap-2">
+            {turnOrder.map((playerId, index) => (
+              <span key={playerId} className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-sm">
+                {index + 1}. {playersById.get(playerId)?.name}
+              </span>
+            ))}
+          </div>
+          <p className="text-sm text-deck-300">Preparando quién empieza...</p>
+        </div>
+      )}
+
+      {phase === 'starting' && (
+        <div className="space-y-5 text-center">
+          <h2 className="text-2xl font-bold">Piedra, papel o tijera</h2>
+          <p className="text-3xl font-extrabold text-hype-cyan">{rpsLabel}</p>
+          <p className="text-lg font-semibold">Empieza: {startingPlayerName || '...'}</p>
+        </div>
+      )}
+
+      {phase === 'play' && (
+        <div className="space-y-5">
+          <div className="rounded-xl border border-white/10 bg-black/25 p-3 text-center text-xs sm:text-sm">
+            <div className="flex flex-wrap justify-center gap-2">
+              {turnOrder.map((playerId) => {
+                const player = playersById.get(playerId);
+                if (!player) return null;
+
+                const severityClass = player.eliminated
+                  ? 'opacity-40'
+                  : player.letterCount >= 4
+                    ? 'text-red-300'
+                    : player.letterCount >= 2
+                      ? 'text-amber-300'
+                      : 'text-white';
 
                 return (
-                  <li
-                    key={player.id}
-                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 transition ${
-                      isActive
-                        ? 'border-hype-cyan bg-hype-cyan/10'
-                        : 'border-white/10 bg-black/20'
-                    } ${player.eliminated ? 'opacity-60' : ''}`}
+                  <span key={`status-${player.id}`} className={severityClass}>
+                    {player.name}: {lettersForCount(player.letterCount)}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-2 text-center">
+            <p className="text-xs uppercase tracking-[0.18em] text-white/60">Turno actual</p>
+            <h2 className="text-4xl font-black">{winner ? `🏆 ${winner.name}` : currentPlayer?.name || 'Sin jugador'}</h2>
+            {!winner && nextPlayerPreview && (
+              <p className="text-sm text-white/70">Siguiente: ↻ {nextPlayerPreview.name}</p>
+            )}
+          </div>
+
+          {!winner && (
+            <>
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center">
+                <p className="text-xs uppercase tracking-[0.18em] text-white/60">Truco actual</p>
+                <p className="mt-1 text-3xl font-bold uppercase">{currentTrick || 'TRUCO LIBRE'}</p>
+
+                {!isEditingTrick ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTrickDraft(currentTrick);
+                      setIsEditingTrick(true);
+                    }}
+                    className="mt-3 rounded-lg border border-white/20 px-3 py-2 text-sm font-semibold"
                   >
+                    Editar truco actual
+                  </button>
+                ) : (
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                     <input
                       type="text"
-                      value={player.name}
-                      onChange={(event) => updatePlayerName(player.id, event.target.value)}
-                      onBlur={() => commitPlayerName(player.id)}
-                      className="w-full rounded bg-transparent px-1 py-1 text-sm font-medium text-white focus:bg-black/20 focus:outline-none"
+                      value={trickDraft}
+                      onChange={(event) => setTrickDraft(event.target.value)}
+                      placeholder="Escribe el truco"
+                      className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
-                    {isWinner && (
-                      <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-semibold text-emerald-300">
-                        Winner
-                      </span>
-                    )}
-                    {!gameStarted && players.length > 2 && (
-                      <button
-                        type="button"
-                        onClick={() => removePlayer(player.id)}
-                        className="rounded px-2 py-1 text-xs text-red-300 transition hover:bg-red-500/20"
-                        aria-label={`Eliminar a ${player.name || `Player ${index + 1}`}`}
-                      >
-                        Quitar
-                      </button>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </article>
-
-          <article className="neo-panel space-y-4 p-5 sm:p-6">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xl font-semibold">Truco actual</h2>
-              {trickAlreadyUsed && <span className="text-xs text-amber-300">Ya se usó antes (warning)</span>}
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <input
-                id="trick-name"
-                type="text"
-                value={trickInput}
-                onChange={(event) => setTrickInput(event.target.value)}
-                placeholder="Ejemplo: kickflip"
-                className="w-full rounded-md border border-white/20 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-deck-300 focus:border-hype-cyan focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={submitTrick}
-                className="rounded-md border border-hype-pink/50 bg-hype-pink/15 px-4 py-2 text-sm font-semibold text-hype-pink transition hover:bg-hype-pink/25"
-              >
-                {currentTrick ? 'Actualizar truco' : 'Guardar truco'}
-              </button>
-            </div>
-
-            {currentTrick && <p className="text-sm text-deck-200">Jugando: {currentTrick}</p>}
-
-            <TrickVideo trickName={trickInput || currentTrick} />
-
-            {trickHistory.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-sm font-semibold text-deck-200">Historial de trucos</p>
-                <div className="flex flex-wrap gap-2">
-                  {trickHistory.map((trick, index) => (
-                    <span key={`${trick}-${index}`} className="rounded-full border border-white/15 px-2.5 py-1 text-xs text-deck-200">
-                      {trick}
-                    </span>
-                  ))}
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCurrentTrick(trickDraft.trim() || 'Truco libre');
+                        setIsEditingTrick(false);
+                      }}
+                      className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white"
+                    >
+                      Guardar
+                    </button>
+                  </div>
+                )}
               </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => applyTurnResult('CAYÓ')}
+                  className="rounded-xl bg-red-500 px-4 py-5 text-xl font-black text-white"
+                >
+                  CAYÓ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyTurnResult('LO LOGRÓ')}
+                  className="rounded-xl bg-emerald-500 px-4 py-5 text-xl font-black text-white"
+                >
+                  LO LOGRÓ
+                </button>
+              </div>
+            </>
+          )}
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={resetRound}
+              className="rounded-lg bg-yellow-400 px-4 py-3 font-semibold text-black"
+            >
+              Reiniciar ronda
+            </button>
+            <button
+              type="button"
+              onClick={newGame}
+              className="rounded-lg border border-red-500 px-4 py-3 font-semibold text-red-400"
+            >
+              Nueva partida
+            </button>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-black/25">
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((prev) => !prev)}
+              className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold"
+            >
+              Historial rápido
+              <span>{historyOpen ? '−' : '+'}</span>
+            </button>
+
+            {historyOpen && (
+              <ul className="space-y-1 border-t border-white/10 px-4 py-3 text-sm text-white/80">
+                {history.length === 0 && <li>No hay rondas todavía.</li>}
+                {history.map((item, index) => (
+                  <li key={`${item.player}-${index}`}>
+                    R{index + 1}: {item.trick} — {item.player} {item.result}
+                  </li>
+                ))}
+              </ul>
             )}
-          </article>
+          </div>
         </div>
-
-        <aside className="space-y-6">
-          <article className="neo-panel space-y-4 p-5 sm:p-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Turno</h2>
-              <label className="flex items-center gap-2 text-xs text-deck-300">
-                <input
-                  type="checkbox"
-                  checked={eliminationMode}
-                  onChange={(event) => setEliminationMode(event.target.checked)}
-                  className="h-4 w-4 rounded border-white/30 bg-black/20"
-                />
-                Elimination mode
-              </label>
-            </div>
-
-            <p className="text-sm text-deck-300">
-              {currentPlayer ? (
-                <>
-                  Turno actual:{' '}
-                  <span className="font-semibold text-hype-cyan">{currentPlayer.name}</span>
-                </>
-              ) : (
-                'Agrega jugadores para comenzar.'
-              )}
-            </p>
-
-            <div className="space-y-2">
-              {activePlayers.map((player, index) => {
-                const isActive = currentPlayer?.id === player.id;
-                const isFailed = lastFailedPlayerId === player.id;
-                const isLeader = player.letterCount === Math.max(...activePlayers.map((item) => item.letterCount));
-
-                return (
-                  <div
-                    key={player.id}
-                    className={`rounded-lg border px-3 py-2 transition ${
-                      isActive ? 'border-hype-cyan bg-hype-cyan/10' : 'border-white/10 bg-black/20'
-                    } ${isFailed ? 'scale-[1.01] border-rose-300 bg-rose-500/20' : ''}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold text-white">{index + 1}. {player.name}</p>
-                      <div className="flex gap-1">
-                        {isLeader && player.letterCount > 0 && (
-                          <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-200">
-                            Leader
-                          </span>
-                        )}
-                        {player.letterCount === 0 && (
-                          <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-sky-200">
-                            Clean
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="mt-2 flex gap-1 text-sm font-black tracking-[0.25em]">
-                      {LETTERS.map((letter, idx) => (
-                        <span
-                          key={`${player.id}-${letter}`}
-                          className={`transition-all duration-300 ${
-                            idx < player.letterCount ? 'text-rose-300' : 'text-white/25'
-                          }`}
-                        >
-                          {letter}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={failCurrentPlayer}
-                disabled={!canStartRound || !currentPlayer || Boolean(winnerId)}
-                className="rounded-md border border-rose-400/50 bg-rose-500/20 px-3 py-2 text-sm font-semibold text-rose-200 transition disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Fail current player
-              </button>
-              <button
-                type="button"
-                onClick={nextTurn}
-                disabled={!canStartRound || !currentPlayer || Boolean(winnerId)}
-                className="rounded-md border border-white/20 bg-black/20 px-3 py-2 text-sm font-semibold text-white transition hover:border-hype-cyan disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Next turn
-              </button>
-              <button
-                type="button"
-                onClick={resetGameKeepPlayers}
-                className="rounded-md border border-amber-400/50 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-200 transition hover:bg-amber-500/20"
-              >
-                Reset game (keep players)
-              </button>
-              <button
-                type="button"
-                onClick={newGame}
-                className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-200 transition hover:bg-red-500/20"
-              >
-                New game (clear everything)
-              </button>
-            </div>
-
-            {winnerId && (
-              <p className="rounded-lg border border-emerald-300/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
-                🎉 Ganador: {players.find((player) => player.id === winnerId)?.name}
-              </p>
-            )}
-          </article>
-
-          <article className="neo-panel space-y-3 p-5 sm:p-6">
-            <h2 className="text-xl font-semibold">Risk chart</h2>
-            <div className="space-y-2">
-              {sortedByRisk.map((player) => (
-                <div key={`risk-${player.id}`} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span>{player.name}</span>
-                    <span className="text-deck-300">{player.letterCount}/5</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-white/10">
-                    <div
-                      className="h-2 rounded-full bg-gradient-to-r from-emerald-300 via-amber-300 to-rose-400 transition-all duration-300"
-                      style={{ width: `${(player.letterCount / 5) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </article>
-        </aside>
-      </div>
+      )}
     </section>
   );
 }
