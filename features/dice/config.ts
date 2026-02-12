@@ -17,6 +17,18 @@ export const trickPools: Record<Difficulty, DiceSet> = {
       { name: 'Frontside 180', note: 'Gira con la mirada.' },
       { name: 'Backside 180', note: 'Aterriza con peso centrado.' },
       { name: 'Manual corto', note: 'Sostén 2-3 segundos.' },
+      {
+        name: '50-50 básico',
+        note: 'Llega derecho y reparte peso entre ambos trucks.',
+        requiresObstacle: true,
+        obstacleNote: 'Ideal en bordillo bajo o manual pad con cera ligera.',
+      },
+      {
+        name: 'Boardslide corto',
+        note: 'Comprométete con el giro de hombros al entrar.',
+        requiresObstacle: true,
+        obstacleNote: 'Hazlo en bordillo bajo para controlar salida.',
+      },
     ],
   },
   intermedio: {
@@ -34,6 +46,18 @@ export const trickPools: Record<Difficulty, DiceSet> = {
       { name: 'Frontside Pop Shove-it', note: 'Mantén tabla pegada al cuerpo.' },
       { name: 'Nose Manual', note: 'Activa core para no perder línea.' },
       { name: 'Half Cab', note: 'En fakie, gira con salida fluida.' },
+      {
+        name: 'Crooked grind',
+        note: 'Bloquea el nose y mantén hombros alineados al obstáculo.',
+        requiresObstacle: true,
+        obstacleNote: 'Funciona mejor en bordillo o hubba baja.',
+      },
+      {
+        name: 'Lipslide',
+        note: 'Gira rápido la cadera para entrar sin frenarte.',
+        requiresObstacle: true,
+        obstacleNote: 'Practícalo en baranda baja o borde encerado.',
+      },
     ],
   },
   avanzado: {
@@ -51,6 +75,24 @@ export const trickPools: Record<Difficulty, DiceSet> = {
       { name: 'Laser Flip', note: 'Compromiso completo al giro.' },
       { name: 'Bigspin', note: 'Tronco y tabla en sincronía.' },
       { name: 'Nollie Heel', note: 'Pop rápido y caída con hombros alineados.' },
+      {
+        name: 'Nosegrind',
+        note: 'Presiona adelante con precisión y salida limpia.',
+        requiresObstacle: true,
+        obstacleNote: 'Muy sólido en hubba corta o bordillo alto.',
+      },
+      {
+        name: 'Smith grind',
+        note: 'Inclina tabla controlando hombro trasero en la línea.',
+        requiresObstacle: true,
+        obstacleNote: 'Mejor en handrail baja o quarter con coping amable.',
+      },
+      {
+        name: 'Bluntslide',
+        note: 'Bloquea tail fuerte y mantén visión de salida.',
+        requiresObstacle: true,
+        obstacleNote: 'Usa cajón o borde con buena superficie de deslizamiento.',
+      },
     ],
   },
 };

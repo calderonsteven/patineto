@@ -3,6 +3,8 @@ export type Difficulty = 'principiante' | 'intermedio' | 'avanzado';
 export type Trick = {
   name: string;
   note: string;
+  requiresObstacle?: boolean;
+  obstacleNote?: string;
 };
 
 export type DiceSet = {
