@@ -1,11 +1,10 @@
 'use client';
 
-import { useYoutubeSearchUrl } from '@/hooks/use-youtube-search-url';
+import { TrickVideo } from '@/components/youtube/trick-video';
 import { useState } from 'react';
 
 export default function SkatePage() {
-  const [trick, setTrick] = useState('');
-  const youtubeSearchUrl = useYoutubeSearchUrl(`${trick.trim()} skate trick`);
+  const [trickName, setTrickName] = useState('');
 
   return (
     <section className="space-y-6">
@@ -15,10 +14,10 @@ export default function SkatePage() {
       </header>
 
       <div className="space-y-5 rounded-xl border border-deck-700 bg-deck-800 p-6">
-        <h2 className="text-xl font-semibold">Busca un truco en YouTube</h2>
+        <h2 className="text-xl font-semibold">Buscar tutorial por nombre de truco</h2>
         <p className="leading-7 text-deck-200">
-          Escribe el nombre del truco y te mostramos el link de búsqueda. En el siguiente paso podremos mostrar el
-          video directamente dentro de esta pantalla.
+          Escribe el nombre del truco y te mostramos automáticamente el primer video relevante de YouTube dentro de
+          esta pantalla.
         </p>
 
         <div className="space-y-3">
@@ -28,40 +27,14 @@ export default function SkatePage() {
           <input
             id="trick-name"
             type="text"
-            value={trick}
-            onChange={(event) => setTrick(event.target.value)}
+            value={trickName}
+            onChange={(event) => setTrickName(event.target.value)}
             placeholder="Ejemplo: kickflip"
             className="w-full rounded-md border border-deck-600 bg-deck-900 px-3 py-2 text-sm text-white placeholder:text-deck-300 focus:border-white focus:outline-none"
           />
         </div>
 
-        <a
-          href={youtubeSearchUrl || undefined}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-disabled={!youtubeSearchUrl}
-          className="inline-flex w-fit rounded-md bg-white px-4 py-2 text-sm font-semibold text-deck-900 transition hover:bg-deck-200 aria-disabled:cursor-not-allowed aria-disabled:bg-deck-600 aria-disabled:text-deck-300"
-        >
-          Buscar en YouTube
-        </a>
-
-        <div className="rounded-lg border border-deck-700 bg-deck-900/60 p-4 text-sm text-deck-200">
-          {youtubeSearchUrl ? (
-            <>
-              <p className="font-medium text-white">Link generado:</p>
-              <a
-                href={youtubeSearchUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 block break-all text-blue-300 underline decoration-blue-400/70 underline-offset-2"
-              >
-                {youtubeSearchUrl}
-              </a>
-            </>
-          ) : (
-            <p>Escribe un truco para generar el link de búsqueda en YouTube.</p>
-          )}
-        </div>
+        <TrickVideo trickName={trickName} />
       </div>
     </section>
   );
