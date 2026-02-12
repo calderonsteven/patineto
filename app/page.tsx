@@ -34,6 +34,9 @@ export default function HomePage() {
           Esta versión inicial define rutas, diseño y estructura de mini-apps. La lógica real de los juegos se
           implementará en la siguiente fase.
         </p>
+        <p className="inline-flex rounded-full border border-white/15 bg-black/25 px-4 py-1 text-xs font-medium uppercase tracking-[0.18em] text-deck-300">
+          Street-ready UI · menos gris, más actitud
+        </p>
       </header>
 
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">

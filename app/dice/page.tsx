@@ -87,7 +87,7 @@ export default function DicePage() {
           />
 
           {!showObstacleValue && !isRolling && !result ? (
-            <p className="mt-3 text-xs text-deck-200">Obstáculo actual: {NO_OBSTACLE_LABEL}</p>
+            <p className="mt-3 text-xs text-deck-300">Obstáculo actual: {NO_OBSTACLE_LABEL}</p>
           ) : null}
 
           <RollSummary result={result} youtubeSearchUrl={youtubeSearchUrl} />
