@@ -32,7 +32,7 @@ export default function RootLayout({
         <header className="sticky top-0 z-20 border-b border-white/10 bg-deck-950/70 backdrop-blur-xl">
           <nav className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-4 sm:flex-nowrap sm:justify-between sm:px-6">
             <Link href="/" className="w-fit rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-lg font-black tracking-tight text-white">
-              Patineto
+              Patineto 🛹
             </Link>
             <MainNav items={navItems} />
           </nav>
