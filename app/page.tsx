@@ -16,6 +16,13 @@ const games = [
     status: 'Activo' as const,
   },
   {
+    title: 'Labs · Trick checklist',
+    description:
+      'Checklist de trucos para marcar si lo quieres, lo practicas o ya lo tienes. Incluye preview visual y acciones de video.',
+    href: '/labs',
+    status: 'Nuevo' as const,
+  },
+  {
     title: 'Perfil y stats',
     description:
       'Módulo futuro para ver progreso, historial y retos entre amigos. Por ahora queda como vista placeholder.',
