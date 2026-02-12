@@ -8,6 +8,7 @@ Patineto es una web app para skaters con mini-apps por módulo (S.K.A.T.E, dados
 - Módulo **S.K.A.T.E** con búsqueda de tutoriales en YouTube por nombre de truco y embed del primer resultado.
 - Módulo **Dados** con selección de dificultad, animación de tirada y generación de reto (postura + obstáculo opcional + truco).
 - Módulo **Labs · Trick Checklist** para marcar estado de trucos y validar flujo visual de evidencia en video.
+- Módulo **Reto del Día** para completar una meta diaria con progreso visual y mensajes motivadores.
 - Módulo **Perfil y estadísticas** como placeholder para futuras métricas.
 - Estilo visual consistente con Tailwind y componentes reutilizables.
 
@@ -45,6 +46,12 @@ Pantalla principal con presentación de Patineto y acceso a todos los módulos.
   - Lo tengo
 - Selección en memoria (sin persistencia ni backend).
 - Botones de flujo UX para “Subir video” y “Grabar video” como siguiente iteración.
+
+### `/reto-del-dia` Reto del Día (nuevo)
+- Presenta automáticamente un reto diario con meta concreta (ej. aterrizajes de ollie).
+- Barra de progreso + contador visual en tiempo real.
+- Botón principal para marcar avance y estado de reto completado.
+- Mensajes motivadores dinámicos y controles de demo (inicio, mitad, completado).
 
 ### `/profile` Perfil
 Página placeholder para próximas funciones de progreso, historial y estadísticas.
@@ -94,6 +101,7 @@ app/
   skate/page.tsx
   dice/page.tsx
   labs/page.tsx
+  reto-del-dia/page.tsx
   profile/page.tsx
   api/youtube/search/route.ts
 components/
