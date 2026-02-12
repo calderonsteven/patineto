@@ -10,13 +10,25 @@ type Player = {
 };
 
 type RoundResult = 'CAYÓ' | 'LO LOGRÓ';
+type RoundState = 'awaiting_setter_attempt' | 'awaiting_defenders' | 'round_complete';
+
+type HistoryEvent =
+  | { type: 'set_attempt'; trick: string; player: string; result: RoundResult }
+  | { type: 'defense_attempt'; trick: string; player: string; result: RoundResult }
+  | { type: 'letter_assigned'; player: string; letter: string; reason: 'set_attempt' | 'defense_attempt' }
+  | { type: 'round_closed'; trick: string; nextSetter: string };
 
 type GameState = {
   players: Player[];
   turnOrder: string[]; // player ids in order
   currentTurnIndex: number; // index in turnOrder
   currentTrick: string;
-  history: { trick: string; player: string; result: RoundResult }[];
+  roundState: RoundState;
+  setterPlayerId: string;
+  defenderQueue: string[];
+  currentDefenderIndex: number;
+  trickCatalogUsed: string[];
+  history: HistoryEvent[];
 };
 
 type Phase = 'setup' | 'order' | 'starting' | 'play';
@@ -56,6 +68,11 @@ export default function SkatePage() {
   const [turnOrder, setTurnOrder] = useState<string[]>([]);
   const [currentTurnIndex, setCurrentTurnIndex] = useState(0);
   const [currentTrick, setCurrentTrick] = useState('Ollie');
+  const [roundState, setRoundState] = useState<RoundState>('awaiting_setter_attempt');
+  const [setterPlayerId, setSetterPlayerId] = useState('');
+  const [defenderQueue, setDefenderQueue] = useState<string[]>([]);
+  const [currentDefenderIndex, setCurrentDefenderIndex] = useState(0);
+  const [trickCatalogUsed, setTrickCatalogUsed] = useState<string[]>([]);
   const [history, setHistory] = useState<GameState['history']>([]);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [isEditingTrick, setIsEditingTrick] = useState(false);
@@ -63,6 +80,17 @@ export default function SkatePage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [startingPlayerName, setStartingPlayerName] = useState('');
   const [rpsLabel, setRpsLabel] = useState('Piedra...');
+
+  const playersById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
+
+  const activeTurnOrder = useMemo(
+    () =>
+      turnOrder.filter((playerId) => {
+        const player = playersById.get(playerId);
+        return Boolean(player && !player.eliminated);
+      }),
+    [playersById, turnOrder],
+  );
 
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -83,10 +111,18 @@ export default function SkatePage() {
           }))
         : [];
 
+      const safeTurnOrder = Array.isArray(parsed.game?.turnOrder) ? parsed.game.turnOrder.filter(Boolean) : [];
+      const persistedSetter = parsed.game?.setterPlayerId ?? safeTurnOrder[0] ?? '';
+
       setPlayers(safePlayers);
-      setTurnOrder(Array.isArray(parsed.game?.turnOrder) ? parsed.game?.turnOrder.filter(Boolean) : []);
+      setTurnOrder(safeTurnOrder);
       setCurrentTurnIndex(Math.max(0, Number(parsed.game?.currentTurnIndex) || 0));
       setCurrentTrick(typeof parsed.game?.currentTrick === 'string' ? parsed.game.currentTrick : 'Ollie');
+      setRoundState(parsed.game?.roundState ?? 'awaiting_setter_attempt');
+      setSetterPlayerId(persistedSetter);
+      setDefenderQueue(Array.isArray(parsed.game?.defenderQueue) ? parsed.game.defenderQueue.filter(Boolean) : []);
+      setCurrentDefenderIndex(Math.max(0, Number(parsed.game?.currentDefenderIndex) || 0));
+      setTrickCatalogUsed(Array.isArray(parsed.game?.trickCatalogUsed) ? parsed.game.trickCatalogUsed : []);
       setHistory(Array.isArray(parsed.game?.history) ? parsed.game.history : []);
 
       if (parsed.phase && ['setup', 'order', 'starting', 'play'].includes(parsed.phase)) {
@@ -103,6 +139,11 @@ export default function SkatePage() {
       turnOrder,
       currentTurnIndex,
       currentTrick,
+      roundState,
+      setterPlayerId,
+      defenderQueue,
+      currentDefenderIndex,
+      trickCatalogUsed,
       history,
     };
 
@@ -113,17 +154,19 @@ export default function SkatePage() {
         game,
       }),
     );
-  }, [phase, players, turnOrder, currentTurnIndex, currentTrick, history]);
-
-  const playersById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
-
-  const activeTurnOrder = useMemo(
-    () => turnOrder.filter((playerId) => {
-      const player = playersById.get(playerId);
-      return Boolean(player && !player.eliminated);
-    }),
-    [playersById, turnOrder],
-  );
+  }, [
+    phase,
+    players,
+    turnOrder,
+    currentTurnIndex,
+    currentTrick,
+    roundState,
+    setterPlayerId,
+    defenderQueue,
+    currentDefenderIndex,
+    trickCatalogUsed,
+    history,
+  ]);
 
   useEffect(() => {
     if (phase !== 'starting') return;
@@ -139,6 +182,7 @@ export default function SkatePage() {
       const starterIndex = turnOrder.findIndex((id) => id === randomId);
       const starterName = playersById.get(randomId)?.name || 'Jugador';
       setCurrentTurnIndex(Math.max(0, starterIndex));
+      setSetterPlayerId(randomId);
       setStartingPlayerName(starterName);
       setRpsLabel('¡Listo!');
 
@@ -152,17 +196,34 @@ export default function SkatePage() {
     };
   }, [phase, turnOrder, playersById]);
 
-  const currentPlayerId = turnOrder[currentTurnIndex];
-  const currentPlayer = currentPlayerId ? playersById.get(currentPlayerId) : null;
+  const setterPlayer = setterPlayerId ? playersById.get(setterPlayerId) ?? null : null;
+  const activeDefenderId = defenderQueue[currentDefenderIndex] ?? null;
+  const activeDefender = activeDefenderId ? playersById.get(activeDefenderId) ?? null : null;
 
   const nextPlayerPreview = useMemo(() => {
-    if (!activeTurnOrder.length || !currentPlayerId) return null;
-    const indexInActive = activeTurnOrder.findIndex((id) => id === currentPlayerId);
+    if (!activeTurnOrder.length || !setterPlayerId) return null;
+    const indexInActive = activeTurnOrder.findIndex((id) => id === setterPlayerId);
     const nextId = activeTurnOrder[(indexInActive + 1) % activeTurnOrder.length] ?? activeTurnOrder[0];
     return playersById.get(nextId) ?? null;
-  }, [activeTurnOrder, currentPlayerId, playersById]);
+  }, [activeTurnOrder, setterPlayerId, playersById]);
 
   const remainingPlayers = useMemo(() => players.filter((player) => !player.eliminated), [players]);
+
+  const getLetterForCount = (count: number) => LETTERS[Math.max(0, Math.min(count - 1, LETTERS.length - 1))] ?? LETTERS[0];
+
+  const getActiveIds = (allPlayers: Player[]) =>
+    turnOrder.filter((id) => {
+      const player = allPlayers.find((item) => item.id === id);
+      return Boolean(player && !player.eliminated);
+    });
+
+  const getNextActiveId = (fromPlayerId: string, allPlayers: Player[]) => {
+    const aliveIds = getActiveIds(allPlayers);
+    if (!aliveIds.length) return '';
+    if (aliveIds.length === 1) return aliveIds[0];
+    const currentAliveIndex = aliveIds.findIndex((id) => id === fromPlayerId);
+    return aliveIds[(currentAliveIndex + 1) % aliveIds.length] ?? aliveIds[0];
+  };
 
   const addPlayer = () => {
     const name = newPlayerName.trim();
@@ -183,6 +244,97 @@ export default function SkatePage() {
     );
   };
 
+  const closeRound = (trickUsed: string) => {
+    const nextSetterId = getNextActiveId(setterPlayerId, players);
+    const nextSetterIndex = turnOrder.findIndex((id) => id === nextSetterId);
+    const nextSetterName = playersById.get(nextSetterId)?.name || 'Jugador';
+
+    setSetterPlayerId(nextSetterId);
+    setCurrentTurnIndex(Math.max(0, nextSetterIndex));
+    setDefenderQueue([]);
+    setCurrentDefenderIndex(0);
+    setRoundState('round_complete');
+    setHistory((prev) => [...prev, { type: 'round_closed', trick: trickUsed, nextSetter: nextSetterName }]);
+  };
+
+  const assignLetter = (targetPlayerId: string, reason: 'set_attempt' | 'defense_attempt') => {
+    let assignedLetter = LETTERS[0];
+    let targetName = 'Jugador';
+
+    setPlayers((prev) =>
+      prev.map((player) => {
+        if (player.id !== targetPlayerId) return player;
+
+        targetName = player.name;
+        const nextCount = clampLetterCount(player.letterCount + 1);
+        assignedLetter = getLetterForCount(nextCount);
+
+        return {
+          ...player,
+          letterCount: nextCount,
+          eliminated: nextCount >= 5,
+        };
+      }),
+    );
+
+    setHistory((prev) => [...prev, { type: 'letter_assigned', player: targetName, letter: assignedLetter, reason }]);
+  };
+
+  const recordSetterAttempt = (success: boolean, trickName: string) => {
+    if (!setterPlayer) return;
+
+    const normalizedTrick = trickName.trim() || 'Truco libre';
+    const result: RoundResult = success ? 'LO LOGRÓ' : 'CAYÓ';
+
+    setCurrentTrick(normalizedTrick);
+    setHistory((prev) => [...prev, { type: 'set_attempt', trick: normalizedTrick, player: setterPlayer.name, result }]);
+
+    if (!success) {
+      assignLetter(setterPlayer.id, 'set_attempt');
+      closeRound(normalizedTrick);
+      return;
+    }
+
+    setTrickCatalogUsed((prev) => (prev.includes(normalizedTrick) ? prev : [...prev, normalizedTrick]));
+
+    const defenders = activeTurnOrder.filter((id) => id !== setterPlayer.id);
+    setDefenderQueue(defenders);
+    setCurrentDefenderIndex(0);
+
+    if (!defenders.length) {
+      closeRound(normalizedTrick);
+      return;
+    }
+
+    setRoundState('awaiting_defenders');
+  };
+
+  const recordDefenseAttempt = (success: boolean) => {
+    if (!activeDefender) return;
+
+    const result: RoundResult = success ? 'LO LOGRÓ' : 'CAYÓ';
+    setHistory((prev) => [...prev, { type: 'defense_attempt', trick: currentTrick, player: activeDefender.name, result }]);
+
+    if (!success) {
+      assignLetter(activeDefender.id, 'defense_attempt');
+    }
+
+    const nextIndex = currentDefenderIndex + 1;
+    if (nextIndex >= defenderQueue.length) {
+      closeRound(currentTrick);
+      return;
+    }
+
+    setCurrentDefenderIndex(nextIndex);
+  };
+
+  const openNextRound = () => {
+    if (roundState !== 'round_complete') return;
+    setCurrentTrick('Truco libre');
+    setTrickDraft('');
+    setRoundState('awaiting_setter_attempt');
+  };
+
   const startGame = () => {
     if (players.length < 2) return;
     const cleanPlayers = players.map((player, index) => ({
@@ -198,6 +350,11 @@ export default function SkatePage() {
     setTurnOrder(order);
     setCurrentTurnIndex(0);
     setCurrentTrick('Ollie');
+    setRoundState('awaiting_setter_attempt');
+    setSetterPlayerId(order[0] ?? '');
+    setDefenderQueue([]);
+    setCurrentDefenderIndex(0);
+    setTrickCatalogUsed([]);
     setTrickDraft('Ollie');
     setHistory([]);
     setHistoryOpen(false);
@@ -208,60 +365,15 @@ export default function SkatePage() {
     }, 900);
   };
 
-  const moveToNextActivePlayer = (order: string[], fromPlayerId: string | undefined, allPlayers: Player[]) => {
-    if (!fromPlayerId) {
-      setCurrentTurnIndex(0);
-      return;
-    }
-
-    const aliveIds = order.filter((id) => {
-      const player = allPlayers.find((item) => item.id === id);
-      return Boolean(player && !player.eliminated);
-    });
-
-    if (aliveIds.length <= 1) {
-      const winnerId = aliveIds[0];
-      const winnerIndex = winnerId ? order.findIndex((id) => id === winnerId) : 0;
-      setCurrentTurnIndex(Math.max(0, winnerIndex));
-      return;
-    }
-
-    const currentAliveIndex = aliveIds.findIndex((id) => id === fromPlayerId);
-    const nextAliveId = aliveIds[(currentAliveIndex + 1) % aliveIds.length] ?? aliveIds[0];
-    const globalIndex = order.findIndex((id) => id === nextAliveId);
-    setCurrentTurnIndex(Math.max(0, globalIndex));
-  };
-
-  const applyTurnResult = (result: RoundResult) => {
-    if (!currentPlayer) return;
-
-    const beforePlayerName = currentPlayer.name;
-    const trickUsed = currentTrick.trim() || 'Truco libre';
-
-    setPlayers((prev) => {
-      const updated = prev.map((player) => {
-        if (player.id !== currentPlayer.id) return player;
-        if (result !== 'CAYÓ') return player;
-
-        const nextCount = clampLetterCount(player.letterCount + 1);
-        return {
-          ...player,
-          letterCount: nextCount,
-          eliminated: nextCount >= 5,
-        };
-      });
-
-      moveToNextActivePlayer(turnOrder, currentPlayer.id, updated);
-      return updated;
-    });
-
-    setHistory((prev) => [...prev, { trick: trickUsed, player: beforePlayerName, result }]);
-  };
-
   const resetRound = () => {
     setPlayers((prev) => prev.map((player) => ({ ...player, letterCount: 0, eliminated: false })));
     setCurrentTurnIndex(0);
     setCurrentTrick('Ollie');
+    setRoundState('awaiting_setter_attempt');
+    setSetterPlayerId(turnOrder[0] ?? '');
+    setDefenderQueue([]);
+    setCurrentDefenderIndex(0);
+    setTrickCatalogUsed([]);
     setTrickDraft('Ollie');
     setHistory([]);
     setPhase(turnOrder.length ? 'play' : 'setup');
@@ -273,6 +385,11 @@ export default function SkatePage() {
     setTurnOrder([]);
     setCurrentTurnIndex(0);
     setCurrentTrick('Ollie');
+    setRoundState('awaiting_setter_attempt');
+    setSetterPlayerId('');
+    setDefenderQueue([]);
+    setCurrentDefenderIndex(0);
+    setTrickCatalogUsed([]);
     setTrickDraft('');
     setHistory([]);
     setNewPlayerName('');
@@ -388,15 +505,19 @@ export default function SkatePage() {
 
           <div className="space-y-2 text-center">
             <p className="text-xs uppercase tracking-[0.18em] text-white/60">Turno actual</p>
-            <h2 className="text-4xl font-black">{winner ? `🏆 ${winner.name}` : currentPlayer?.name || 'Sin jugador'}</h2>
-            {!winner && nextPlayerPreview && (
-              <p className="text-sm text-white/70">Siguiente: ↻ {nextPlayerPreview.name}</p>
-            )}
+            <h2 className="text-4xl font-black">{winner ? `🏆 ${winner.name}` : setterPlayer?.name || 'Sin jugador'}</h2>
+            {!winner && nextPlayerPreview && <p className="text-sm text-white/70">Siguiente: ↻ {nextPlayerPreview.name}</p>}
           </div>
 
           {!winner && (
             <>
               <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center">
+                <p className="text-sm font-semibold text-hype-cyan">
+                  {roundState === 'awaiting_setter_attempt' && `${setterPlayer?.name || 'Jugador'} intenta setear`}
+                  {roundState === 'awaiting_defenders' &&
+                    `${activeDefender?.name || 'Jugador'} responde truco ${currentTrick || 'TRUCO LIBRE'}`}
+                  {roundState === 'round_complete' && 'Ronda terminada: pedir nuevo truco'}
+                </p>
                 <p className="text-xs uppercase tracking-[0.18em] text-white/60">Truco actual</p>
                 <p className="mt-1 text-3xl font-bold uppercase">{currentTrick || 'TRUCO LIBRE'}</p>
 
@@ -434,22 +555,53 @@ export default function SkatePage() {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {roundState === 'awaiting_setter_attempt' && (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => recordSetterAttempt(false, trickDraft || currentTrick)}
+                    className="rounded-xl bg-red-500 px-4 py-5 text-xl font-black text-white"
+                  >
+                    SETTER CAYÓ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => recordSetterAttempt(true, trickDraft || currentTrick)}
+                    className="rounded-xl bg-emerald-500 px-4 py-5 text-xl font-black text-white"
+                  >
+                    SETTER LOGRÓ
+                  </button>
+                </div>
+              )}
+
+              {roundState === 'awaiting_defenders' && (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => recordDefenseAttempt(false)}
+                    className="rounded-xl bg-red-500 px-4 py-5 text-xl font-black text-white"
+                  >
+                    DEFENSA CAYÓ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => recordDefenseAttempt(true)}
+                    className="rounded-xl bg-emerald-500 px-4 py-5 text-xl font-black text-white"
+                  >
+                    DEFENSA LOGRÓ
+                  </button>
+                </div>
+              )}
+
+              {roundState === 'round_complete' && (
                 <button
                   type="button"
-                  onClick={() => applyTurnResult('CAYÓ')}
-                  className="rounded-xl bg-red-500 px-4 py-5 text-xl font-black text-white"
+                  onClick={openNextRound}
+                  className="w-full rounded-xl bg-indigo-600 px-4 py-5 text-xl font-black text-white"
                 >
-                  CAYÓ
+                  Pedir nuevo truco
                 </button>
-                <button
-                  type="button"
-                  onClick={() => applyTurnResult('LO LOGRÓ')}
-                  className="rounded-xl bg-emerald-500 px-4 py-5 text-xl font-black text-white"
-                >
-                  LO LOGRÓ
-                </button>
-              </div>
+              )}
             </>
           )}
 
@@ -484,8 +636,15 @@ export default function SkatePage() {
               <ul className="space-y-1 border-t border-white/10 px-4 py-3 text-sm text-white/80">
                 {history.length === 0 && <li>No hay rondas todavía.</li>}
                 {history.map((item, index) => (
-                  <li key={`${item.player}-${index}`}>
-                    R{index + 1}: {item.trick} — {item.player} {item.result}
+                  <li key={`${item.type}-${index}`}>
+                    {item.type === 'set_attempt' &&
+                      `E${index + 1}: [SET] ${item.trick} — ${item.player} ${item.result}`}
+                    {item.type === 'defense_attempt' &&
+                      `E${index + 1}: [DEF] ${item.trick} — ${item.player} ${item.result}`}
+                    {item.type === 'letter_assigned' &&
+                      `E${index + 1}: [LETRA] ${item.player} recibe ${item.letter} (${item.reason})`}
+                    {item.type === 'round_closed' &&
+                      `E${index + 1}: [CIERRE] ${item.trick} · Próximo setter: ${item.nextSetter}`}
                   </li>
                 ))}
               </ul>
