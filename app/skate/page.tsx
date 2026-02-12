@@ -20,8 +20,8 @@ type HistoryEvent =
 
 type GameState = {
   players: Player[];
-  turnOrder: string[]; // player ids in order
-  currentTurnIndex: number; // index in turnOrder
+  turnOrder: string[];
+  currentTurnIndex: number;
   currentTrick: string;
   roundState: RoundState;
   setterPlayerId: string;
@@ -209,8 +209,6 @@ export default function SkatePage() {
 
   const remainingPlayers = useMemo(() => players.filter((player) => !player.eliminated), [players]);
 
-  const getLetterForCount = (count: number) => LETTERS[Math.max(0, Math.min(count - 1, LETTERS.length - 1))] ?? LETTERS[0];
-
   const getActiveIds = (allPlayers: Player[]) =>
     turnOrder.filter((id) => {
       const player = allPlayers.find((item) => item.id === id);
@@ -244,10 +242,33 @@ export default function SkatePage() {
     );
   };
 
-  const closeRound = (trickUsed: string) => {
-    const nextSetterId = getNextActiveId(setterPlayerId, players);
+  const getLetterForCount = (count: number) => LETTERS[Math.max(0, Math.min(count - 1, LETTERS.length - 1))] ?? LETTERS[0];
+
+  const applyLetterPenalty = (snapshot: Player[], targetPlayerId: string) => {
+    let penalizedPlayerName = 'Jugador';
+    let assignedLetter: (typeof LETTERS)[number] = LETTERS[0];
+
+    const updatedPlayers = snapshot.map((player) => {
+      if (player.id !== targetPlayerId) return player;
+
+      penalizedPlayerName = player.name;
+      const nextCount = clampLetterCount(player.letterCount + 1);
+      assignedLetter = getLetterForCount(nextCount);
+
+      return {
+        ...player,
+        letterCount: nextCount,
+        eliminated: nextCount >= 5,
+      };
+    });
+
+    return { updatedPlayers, penalizedPlayerName, assignedLetter };
+  };
+
+  const closeRound = (trickUsed: string, roundSetterId: string, playersSnapshot: Player[]) => {
+    const nextSetterId = getNextActiveId(roundSetterId, playersSnapshot);
     const nextSetterIndex = turnOrder.findIndex((id) => id === nextSetterId);
-    const nextSetterName = playersById.get(nextSetterId)?.name || 'Jugador';
+    const nextSetterName = playersSnapshot.find((player) => player.id === nextSetterId)?.name || 'Jugador';
 
     setSetterPlayerId(nextSetterId);
     setCurrentTurnIndex(Math.max(0, nextSetterIndex));
@@ -257,52 +278,41 @@ export default function SkatePage() {
     setHistory((prev) => [...prev, { type: 'round_closed', trick: trickUsed, nextSetter: nextSetterName }]);
   };
 
-  const assignLetter = (targetPlayerId: string, reason: 'set_attempt' | 'defense_attempt') => {
-    let assignedLetter = LETTERS[0];
-    let targetName = 'Jugador';
-
-    setPlayers((prev) =>
-      prev.map((player) => {
-        if (player.id !== targetPlayerId) return player;
-
-        targetName = player.name;
-        const nextCount = clampLetterCount(player.letterCount + 1);
-        assignedLetter = getLetterForCount(nextCount);
-
-        return {
-          ...player,
-          letterCount: nextCount,
-          eliminated: nextCount >= 5,
-        };
-      }),
-    );
-
-    setHistory((prev) => [...prev, { type: 'letter_assigned', player: targetName, letter: assignedLetter, reason }]);
-  };
-
   const recordSetterAttempt = (success: boolean, trickName: string) => {
     if (!setterPlayer) return;
 
+    const roundSetterId = setterPlayer.id;
+    const roundSetterName = setterPlayer.name;
     const normalizedTrick = trickName.trim() || 'Truco libre';
     const result: RoundResult = success ? 'LO LOGRÓ' : 'CAYÓ';
 
     setCurrentTrick(normalizedTrick);
-    setHistory((prev) => [...prev, { type: 'set_attempt', trick: normalizedTrick, player: setterPlayer.name, result }]);
+    setHistory((prev) => [...prev, { type: 'set_attempt', trick: normalizedTrick, player: roundSetterName, result }]);
 
     if (!success) {
-      assignLetter(setterPlayer.id, 'set_attempt');
-      closeRound(normalizedTrick);
+      const { updatedPlayers, penalizedPlayerName, assignedLetter } = applyLetterPenalty(players, roundSetterId);
+      setPlayers(updatedPlayers);
+      setHistory((prev) => [
+        ...prev,
+        {
+          type: 'letter_assigned',
+          player: penalizedPlayerName,
+          letter: assignedLetter,
+          reason: 'set_attempt',
+        },
+      ]);
+      closeRound(normalizedTrick, roundSetterId, updatedPlayers);
       return;
     }
 
     setTrickCatalogUsed((prev) => (prev.includes(normalizedTrick) ? prev : [...prev, normalizedTrick]));
 
-    const defenders = activeTurnOrder.filter((id) => id !== setterPlayer.id);
+    const defenders = activeTurnOrder.filter((id) => id !== roundSetterId);
     setDefenderQueue(defenders);
     setCurrentDefenderIndex(0);
 
     if (!defenders.length) {
-      closeRound(normalizedTrick);
+      closeRound(normalizedTrick, roundSetterId, players);
       return;
     }
 
@@ -312,16 +322,31 @@ export default function SkatePage() {
   const recordDefenseAttempt = (success: boolean) => {
     if (!activeDefender) return;
 
+    const defenderId = activeDefender.id;
+    const defenderName = activeDefender.name;
     const result: RoundResult = success ? 'LO LOGRÓ' : 'CAYÓ';
-    setHistory((prev) => [...prev, { type: 'defense_attempt', trick: currentTrick, player: activeDefender.name, result }]);
 
+    setHistory((prev) => [...prev, { type: 'defense_attempt', trick: currentTrick, player: defenderName, result }]);
+
+    let nextPlayersSnapshot = players;
     if (!success) {
-      assignLetter(activeDefender.id, 'defense_attempt');
+      const { updatedPlayers, penalizedPlayerName, assignedLetter } = applyLetterPenalty(players, defenderId);
+      nextPlayersSnapshot = updatedPlayers;
+      setPlayers(updatedPlayers);
+      setHistory((prev) => [
+        ...prev,
+        {
+          type: 'letter_assigned',
+          player: penalizedPlayerName,
+          letter: assignedLetter,
+          reason: 'defense_attempt',
+        },
+      ]);
     }
 
     const nextIndex = currentDefenderIndex + 1;
     if (nextIndex >= defenderQueue.length) {
-      closeRound(currentTrick);
+      closeRound(currentTrick, setterPlayerId, nextPlayersSnapshot);
       return;
     }
 
