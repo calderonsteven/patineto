@@ -1,5 +1,5 @@
 import { NO_OBSTACLE_LABEL, trickPools } from '@/features/dice/config';
-import { DiceResult, Difficulty, RollDynamics } from '@/features/dice/types';
+import { DiceResult, Difficulty, RollDynamics, Trick } from '@/features/dice/types';
 
 export function randomFrom<T>(array: T[]) {
   return array[Math.floor(Math.random() * array.length)];
@@ -49,15 +49,25 @@ export function buildRollDynamics(): RollDynamics {
   };
 }
 
-export function buildFinalResult(selectedDifficulty: Difficulty, includeObstacle: boolean): DiceResult {
+function getAvailableTricks(tricks: Trick[], includeObstacle: boolean) {
+  const filtered = includeObstacle ? tricks : tricks.filter((trick) => !trick.requiresObstacle);
+  return filtered.length > 0 ? filtered : tricks;
+}
+
+export function buildFinalResult(
+  selectedDifficulty: Difficulty,
+  includeObstacle: boolean,
+  selectedObstacles: string[] = []
+): DiceResult {
   const adaptedDifficulty = pickDifficulty(selectedDifficulty);
   const pool = trickPools[adaptedDifficulty];
+  const availableObstacles = selectedObstacles.length > 0 ? pool.obstacle.filter((obstacle) => selectedObstacles.includes(obstacle)) : pool.obstacle;
 
   return {
     adaptedDifficulty,
     stance: randomFrom(pool.stance),
-    obstacle: includeObstacle ? randomFrom(pool.obstacle) : NO_OBSTACLE_LABEL,
-    trick: randomFrom(pool.tricks),
+    obstacle: includeObstacle ? randomFrom(availableObstacles.length > 0 ? availableObstacles : pool.obstacle) : NO_OBSTACLE_LABEL,
+    trick: randomFrom(getAvailableTricks(pool.tricks, includeObstacle)),
   };
 }
 

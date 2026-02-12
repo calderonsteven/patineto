@@ -15,9 +15,12 @@ export default function DicePage() {
     rollId,
     includeObstacle,
     setIncludeObstacle,
+    selectedObstacles,
+    toggleObstacle,
     dynamics,
     result,
     preview,
+    activePool,
     rollDice,
     resetResult,
   } = useDiceRoller();
@@ -49,6 +52,34 @@ export default function DicePage() {
               />
             </button>
           </label>
+
+          {includeObstacle ? (
+            <div className="mt-4 w-full max-w-xl rounded-2xl border border-white/10 bg-black/20 p-3 sm:p-4">
+              <p className="text-center text-[10px] uppercase tracking-[0.2em] text-deck-300 sm:text-xs">Obstáculos disponibles</p>
+              <p className="mt-1 text-center text-xs text-deck-300 sm:text-sm">Selecciona uno o más para filtrar la tirada.</p>
+
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                {activePool.obstacle.map((obstacle) => {
+                  const isSelected = selectedObstacles.includes(obstacle);
+                  return (
+                    <button
+                      key={obstacle}
+                      type="button"
+                      onClick={() => toggleObstacle(obstacle)}
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold transition sm:text-sm ${
+                        isSelected
+                          ? 'border-hype-cyan/70 bg-hype-cyan/20 text-white'
+                          : 'border-white/20 bg-white/5 text-deck-200 hover:border-white/40'
+                      }`}
+                    >
+                      {isSelected ? '✓ ' : ''}
+                      {obstacle}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
 
           <motion.button
             type="button"
