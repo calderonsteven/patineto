@@ -17,7 +17,6 @@ export const trickPools: Record<Difficulty, DiceSet> = {
       { name: 'Frontside 180', note: 'Gira con la mirada.' },
       { name: 'Backside 180', note: 'Aterriza con peso centrado.' },
       { name: 'Manual corto', note: 'Sostén 2-3 segundos.' },
-      { name: 'Nollie', note: 'Explosión rápida con pie delantero.' },
     ],
   },
   intermedio: {
