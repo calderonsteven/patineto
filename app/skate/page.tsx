@@ -14,7 +14,14 @@ type RoundState = 'awaiting_setter_attempt' | 'awaiting_defenders' | 'round_comp
 
 type HistoryEvent =
   | { type: 'set_attempt'; trick: string; player: string; result: RoundResult }
-  | { type: 'defense_attempt'; trick: string; player: string; result: RoundResult }
+  | {
+      type: 'defense_attempt';
+      trick: string;
+      player: string;
+      result: RoundResult;
+      attemptNumber: number;
+      attemptsAllowed: number;
+    }
   | { type: 'letter_assigned'; player: string; letter: string; reason: 'set_attempt' | 'defense_attempt' }
   | { type: 'round_closed'; trick: string; nextSetter: string };
 
@@ -28,6 +35,7 @@ type GameState = {
   defenderQueue: string[];
   currentDefenderIndex: number;
   trickCatalogUsed: string[];
+  remainingDefenseAttempts: number;
   history: HistoryEvent[];
 };
 
@@ -62,6 +70,8 @@ const clampLetterCount = (value: number) => Math.max(0, Math.min(5, value));
 const lettersForCount = (count: number) =>
   LETTERS.map((letter, index) => (index < count ? letter : '_')).join(' ');
 
+const normalizeTrickName = (value: string) => value.trim().toLowerCase();
+
 export default function SkatePage() {
   const [phase, setPhase] = useState<Phase>('setup');
   const [players, setPlayers] = useState<Player[]>([]);
@@ -73,6 +83,7 @@ export default function SkatePage() {
   const [defenderQueue, setDefenderQueue] = useState<string[]>([]);
   const [currentDefenderIndex, setCurrentDefenderIndex] = useState(0);
   const [trickCatalogUsed, setTrickCatalogUsed] = useState<string[]>([]);
+  const [remainingDefenseAttempts, setRemainingDefenseAttempts] = useState(1);
   const [history, setHistory] = useState<GameState['history']>([]);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [isEditingTrick, setIsEditingTrick] = useState(false);
@@ -80,6 +91,7 @@ export default function SkatePage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [startingPlayerName, setStartingPlayerName] = useState('');
   const [rpsLabel, setRpsLabel] = useState('Piedra...');
+  const [setterValidationMessage, setSetterValidationMessage] = useState('');
 
   const playersById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
 
@@ -123,6 +135,7 @@ export default function SkatePage() {
       setDefenderQueue(Array.isArray(parsed.game?.defenderQueue) ? parsed.game.defenderQueue.filter(Boolean) : []);
       setCurrentDefenderIndex(Math.max(0, Number(parsed.game?.currentDefenderIndex) || 0));
       setTrickCatalogUsed(Array.isArray(parsed.game?.trickCatalogUsed) ? parsed.game.trickCatalogUsed : []);
+      setRemainingDefenseAttempts(Math.max(1, Number(parsed.game?.remainingDefenseAttempts) || 1));
       setHistory(Array.isArray(parsed.game?.history) ? parsed.game.history : []);
 
       if (parsed.phase && ['setup', 'order', 'starting', 'play'].includes(parsed.phase)) {
@@ -144,6 +157,7 @@ export default function SkatePage() {
       defenderQueue,
       currentDefenderIndex,
       trickCatalogUsed,
+      remainingDefenseAttempts,
       history,
     };
 
@@ -165,6 +179,7 @@ export default function SkatePage() {
     defenderQueue,
     currentDefenderIndex,
     trickCatalogUsed,
+    remainingDefenseAttempts,
     history,
   ]);
 
@@ -223,6 +238,18 @@ export default function SkatePage() {
     return aliveIds[(currentAliveIndex + 1) % aliveIds.length] ?? aliveIds[0];
   };
 
+  const getDefenseAttemptsAllowed = (playerId: string | null) => {
+    if (!playerId) return 1;
+    const player = playersById.get(playerId);
+    return player?.letterCount === 4 ? 2 : 1;
+  };
+
+  const advanceToDefender = (nextIndex: number) => {
+    const nextDefenderId = defenderQueue[nextIndex] ?? null;
+    setCurrentDefenderIndex(nextIndex);
+    setRemainingDefenseAttempts(getDefenseAttemptsAllowed(nextDefenderId));
+  };
+
   const addPlayer = () => {
     const name = newPlayerName.trim();
     if (!name) return;
@@ -274,6 +301,7 @@ export default function SkatePage() {
     setCurrentTurnIndex(Math.max(0, nextSetterIndex));
     setDefenderQueue([]);
     setCurrentDefenderIndex(0);
+    setRemainingDefenseAttempts(1);
     setRoundState('round_complete');
     setHistory((prev) => [...prev, { type: 'round_closed', trick: trickUsed, nextSetter: nextSetterName }]);
   };
@@ -283,11 +311,18 @@ export default function SkatePage() {
 
     const roundSetterId = setterPlayer.id;
     const roundSetterName = setterPlayer.name;
-    const normalizedTrick = trickName.trim() || 'Truco libre';
+    const normalizedTrickLabel = trickName.trim() || 'Truco libre';
+    const normalizedCatalogKey = normalizeTrickName(normalizedTrickLabel);
     const result: RoundResult = success ? 'LO LOGRÓ' : 'CAYÓ';
 
-    setCurrentTrick(normalizedTrick);
-    setHistory((prev) => [...prev, { type: 'set_attempt', trick: normalizedTrick, player: roundSetterName, result }]);
+    if (success && trickCatalogUsed.includes(normalizedCatalogKey)) {
+      setSetterValidationMessage('Ese truco ya fue seteado en la partida. Elige otro.');
+      return;
+    }
+
+    setSetterValidationMessage('');
+    setCurrentTrick(normalizedTrickLabel);
+    setHistory((prev) => [...prev, { type: 'set_attempt', trick: normalizedTrickLabel, player: roundSetterName, result }]);
 
     if (!success) {
       const { updatedPlayers, penalizedPlayerName, assignedLetter } = applyLetterPenalty(players, roundSetterId);
@@ -301,21 +336,22 @@ export default function SkatePage() {
           reason: 'set_attempt',
         },
       ]);
-      closeRound(normalizedTrick, roundSetterId, updatedPlayers);
+      closeRound(normalizedTrickLabel, roundSetterId, updatedPlayers);
       return;
     }
 
-    setTrickCatalogUsed((prev) => (prev.includes(normalizedTrick) ? prev : [...prev, normalizedTrick]));
+    setTrickCatalogUsed((prev) => (prev.includes(normalizedCatalogKey) ? prev : [...prev, normalizedCatalogKey]));
 
     const defenders = activeTurnOrder.filter((id) => id !== roundSetterId);
     setDefenderQueue(defenders);
-    setCurrentDefenderIndex(0);
 
     if (!defenders.length) {
-      closeRound(normalizedTrick, roundSetterId, players);
+      closeRound(normalizedTrickLabel, roundSetterId, players);
       return;
     }
 
+    setCurrentDefenderIndex(0);
+    setRemainingDefenseAttempts(getDefenseAttemptsAllowed(defenders[0]));
     setRoundState('awaiting_defenders');
   };
 
@@ -324,12 +360,30 @@ export default function SkatePage() {
 
     const defenderId = activeDefender.id;
     const defenderName = activeDefender.name;
+    const attemptsAllowed = getDefenseAttemptsAllowed(defenderId);
+    const attemptNumber = attemptsAllowed - remainingDefenseAttempts + 1;
     const result: RoundResult = success ? 'LO LOGRÓ' : 'CAYÓ';
 
-    setHistory((prev) => [...prev, { type: 'defense_attempt', trick: currentTrick, player: defenderName, result }]);
+    setHistory((prev) => [
+      ...prev,
+      {
+        type: 'defense_attempt',
+        trick: currentTrick,
+        player: defenderName,
+        result,
+        attemptNumber,
+        attemptsAllowed,
+      },
+    ]);
 
     let nextPlayersSnapshot = players;
+
     if (!success) {
+      if (attemptsAllowed === 2 && remainingDefenseAttempts > 1) {
+        setRemainingDefenseAttempts((prev) => Math.max(1, prev - 1));
+        return;
+      }
+
       const { updatedPlayers, penalizedPlayerName, assignedLetter } = applyLetterPenalty(players, defenderId);
       nextPlayersSnapshot = updatedPlayers;
       setPlayers(updatedPlayers);
@@ -350,13 +404,14 @@ export default function SkatePage() {
       return;
     }
 
-    setCurrentDefenderIndex(nextIndex);
+    advanceToDefender(nextIndex);
   };
 
   const openNextRound = () => {
     if (roundState !== 'round_complete') return;
     setCurrentTrick('Truco libre');
     setTrickDraft('');
+    setSetterValidationMessage('');
     setRoundState('awaiting_setter_attempt');
   };
 
@@ -379,6 +434,8 @@ export default function SkatePage() {
     setSetterPlayerId(order[0] ?? '');
     setDefenderQueue([]);
     setCurrentDefenderIndex(0);
+    setRemainingDefenseAttempts(1);
+    setSetterValidationMessage('');
     setTrickCatalogUsed([]);
     setTrickDraft('Ollie');
     setHistory([]);
@@ -398,6 +455,8 @@ export default function SkatePage() {
     setSetterPlayerId(turnOrder[0] ?? '');
     setDefenderQueue([]);
     setCurrentDefenderIndex(0);
+    setRemainingDefenseAttempts(1);
+    setSetterValidationMessage('');
     setTrickCatalogUsed([]);
     setTrickDraft('Ollie');
     setHistory([]);
@@ -414,6 +473,8 @@ export default function SkatePage() {
     setSetterPlayerId('');
     setDefenderQueue([]);
     setCurrentDefenderIndex(0);
+    setRemainingDefenseAttempts(1);
+    setSetterValidationMessage('');
     setTrickCatalogUsed([]);
     setTrickDraft('');
     setHistory([]);
@@ -578,6 +639,16 @@ export default function SkatePage() {
                     </button>
                   </div>
                 )}
+
+                {setterValidationMessage && roundState === 'awaiting_setter_attempt' && (
+                  <p className="mt-3 text-sm font-semibold text-red-300">{setterValidationMessage}</p>
+                )}
+
+                {roundState === 'awaiting_defenders' && activeDefender && (
+                  <p className="mt-3 text-sm text-white/80">
+                    Intentos de {activeDefender.name}: {remainingDefenseAttempts} restantes
+                  </p>
+                )}
               </div>
 
               {roundState === 'awaiting_setter_attempt' && (
@@ -587,14 +658,14 @@ export default function SkatePage() {
                     onClick={() => recordSetterAttempt(false, trickDraft || currentTrick)}
                     className="rounded-xl bg-red-500 px-4 py-5 text-xl font-black text-white"
                   >
-                    SETTER CAYÓ
+                    FALLO
                   </button>
                   <button
                     type="button"
                     onClick={() => recordSetterAttempt(true, trickDraft || currentTrick)}
                     className="rounded-xl bg-emerald-500 px-4 py-5 text-xl font-black text-white"
                   >
-                    SETTER LOGRÓ
+                    LO LOGRO
                   </button>
                 </div>
               )}
@@ -606,14 +677,14 @@ export default function SkatePage() {
                     onClick={() => recordDefenseAttempt(false)}
                     className="rounded-xl bg-red-500 px-4 py-5 text-xl font-black text-white"
                   >
-                    DEFENSA CAYÓ
+                    FALLO
                   </button>
                   <button
                     type="button"
                     onClick={() => recordDefenseAttempt(true)}
                     className="rounded-xl bg-emerald-500 px-4 py-5 text-xl font-black text-white"
                   >
-                    DEFENSA LOGRÓ
+                    LO LOGRO
                   </button>
                 </div>
               )}
@@ -665,7 +736,7 @@ export default function SkatePage() {
                     {item.type === 'set_attempt' &&
                       `E${index + 1}: [SET] ${item.trick} — ${item.player} ${item.result}`}
                     {item.type === 'defense_attempt' &&
-                      `E${index + 1}: [DEF] ${item.trick} — ${item.player} ${item.result}`}
+                      `E${index + 1}: [DEF ${item.attemptNumber}/${item.attemptsAllowed}] ${item.trick} — ${item.player} ${item.result}`}
                     {item.type === 'letter_assigned' &&
                       `E${index + 1}: [LETRA] ${item.player} recibe ${item.letter} (${item.reason})`}
                     {item.type === 'round_closed' &&
