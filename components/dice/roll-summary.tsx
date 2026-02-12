@@ -11,11 +11,11 @@ export function RollSummary({ result }: RollSummaryProps) {
   }
 
   return (
-    <div className="mt-8 space-y-4">
-      <div className="rounded-2xl border border-white/15 bg-white/[0.04] p-5">
-        <p className="text-xs uppercase tracking-[0.2em] text-deck-300">Ver tutorial</p>
-        <p className="mt-2 text-sm text-deck-300">Dificultad aplicada: {result.adaptedDifficulty}</p>
-        <p className="mt-1 text-white">Tip: {result.trick.note}</p>
+    <div className="mt-4 space-y-3 sm:mt-8 sm:space-y-4">
+      <div className="rounded-xl border border-white/15 bg-white/[0.04] p-4 sm:rounded-2xl sm:p-5">
+        <p className="text-[10px] uppercase tracking-[0.16em] text-deck-300 sm:text-xs sm:tracking-[0.2em]">Ver tutorial</p>
+        <p className="mt-1.5 text-xs text-deck-300 sm:mt-2 sm:text-sm">Dificultad aplicada: {result.adaptedDifficulty}</p>
+        <p className="mt-1 text-sm text-white sm:text-base">Tip: {result.trick.note}</p>
       </div>
 
       <TrickVideo trickName={result.trick.name} />

@@ -22,7 +22,7 @@ const cardStyles = [
 
 export function RollResultTiles({ isRolling, rollId, dynamics, result, preview, showObstacleValue }: RollResultTilesProps) {
   return (
-    <div className="mt-8 flex flex-col items-center gap-3">
+    <div className="mt-4 flex flex-col items-center gap-2 sm:mt-8 sm:gap-3">
       {tileLabels.map((label, index) => {
         const previewValue = label === 'Postura' ? preview?.stance : label === 'Obstáculo' ? preview?.obstacle : preview?.trick.name;
 
@@ -36,7 +36,7 @@ export function RollResultTiles({ isRolling, rollId, dynamics, result, preview, 
         return (
           <motion.article
             key={`${label}-${rollId}`}
-            className={`w-full max-w-xl rounded-2xl border p-5 text-center shadow-2xl ${cardStyles[index]}`}
+            className={`w-full max-w-xl rounded-xl border p-4 text-center shadow-xl sm:rounded-2xl sm:p-5 sm:shadow-2xl ${cardStyles[index]}`}
             initial={{ opacity: 0, y: 20, scale: 0.96 }}
             animate={
               isRolling
@@ -62,8 +62,8 @@ export function RollResultTiles({ isRolling, rollId, dynamics, result, preview, 
                   }
             }
           >
-            <p className="text-[11px] uppercase tracking-[0.22em] text-deck-300">{label}</p>
-            <p className={`mt-2 font-bold leading-tight ${isTrick ? 'text-3xl text-hype-cyan sm:text-5xl' : 'text-2xl sm:text-3xl'}`}>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-deck-300 sm:text-[11px] sm:tracking-[0.22em]">{label}</p>
+            <p className={`mt-1.5 font-bold leading-tight sm:mt-2 ${isTrick ? 'text-2xl text-hype-cyan sm:text-5xl' : 'text-xl sm:text-3xl'}`}>
               {value}
             </p>
           </motion.article>

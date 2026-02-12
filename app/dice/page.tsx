@@ -5,7 +5,6 @@ import { motion } from 'framer-motion';
 import { DifficultySelector } from '@/components/dice/difficulty-selector';
 import { RollResultTiles } from '@/components/dice/roll-result-tiles';
 import { RollSummary } from '@/components/dice/roll-summary';
-import { NO_OBSTACLE_LABEL } from '@/features/dice/config';
 import { useDiceRoller } from '@/hooks/use-dice-roller';
 
 export default function DicePage() {
@@ -27,26 +26,26 @@ export default function DicePage() {
   const hasResult = Boolean(result);
 
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#111235] via-[#191b44] to-[#22144f] px-4 py-8 shadow-2xl shadow-black/35 sm:px-8 sm:py-12">
+    <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#111235] via-[#191b44] to-[#22144f] px-3 py-5 shadow-2xl shadow-black/35 sm:rounded-3xl sm:px-6 sm:py-10">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(34,211,238,0.14),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(168,85,247,0.2),transparent_38%)]" />
 
       {!hasResult ? (
-        <div className="relative mx-auto flex min-h-[72vh] w-full max-w-3xl flex-col items-center justify-center">
-          <h1 className="text-center text-xs uppercase tracking-[0.4em] text-hype-cyan/80 sm:text-sm">Juego de Dados</h1>
+        <div className="relative mx-auto flex min-h-[66vh] w-full max-w-3xl flex-col items-center justify-center">
+          <h1 className="text-center text-[10px] uppercase tracking-[0.34em] text-hype-cyan/80 sm:text-xs">Juego de Dados</h1>
 
           <DifficultySelector selectedDifficulty={selectedDifficulty} onChangeDifficulty={setSelectedDifficulty} />
 
-          <label className="mt-6 inline-flex items-center gap-3 rounded-full border border-white/10 bg-black/25 px-4 py-2 text-sm text-deck-200">
+          <label className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-1.5 text-xs text-deck-200 sm:mt-6 sm:gap-3 sm:px-4 sm:py-2 sm:text-sm">
             <span>Incluir obstáculo</span>
             <button
               type="button"
               role="switch"
               aria-checked={includeObstacle}
               onClick={() => setIncludeObstacle(!includeObstacle)}
-              className={`relative h-6 w-11 rounded-full transition ${includeObstacle ? 'bg-hype-cyan' : 'bg-white/20'}`}
+              className={`relative h-5 w-10 rounded-full transition sm:h-6 sm:w-11 ${includeObstacle ? 'bg-hype-cyan' : 'bg-white/20'}`}
             >
               <span
-                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${includeObstacle ? 'left-[22px]' : 'left-0.5'}`}
+                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition sm:h-5 sm:w-5 ${includeObstacle ? 'left-[20px] sm:left-[22px]' : 'left-0.5'}`}
               />
             </button>
           </label>
@@ -55,7 +54,7 @@ export default function DicePage() {
             type="button"
             onClick={rollDice}
             disabled={isRolling}
-            className="mt-10 h-52 w-52 rounded-full border border-white/20 bg-white/10 text-2xl font-black uppercase tracking-[0.12em] text-white shadow-[0_0_60px_rgba(34,211,238,0.35)] transition hover:scale-[1.02] disabled:cursor-not-allowed"
+            className="mt-8 h-44 w-44 rounded-full border border-white/20 bg-white/10 text-xl font-black uppercase tracking-[0.11em] text-white shadow-[0_0_50px_rgba(34,211,238,0.3)] transition hover:scale-[1.02] disabled:cursor-not-allowed sm:mt-10 sm:h-52 sm:w-52 sm:text-2xl"
             animate={
               isRolling
                 ? {
@@ -79,11 +78,9 @@ export default function DicePage() {
           >
             {isRolling ? 'Rodando...' : 'Lanzar'}
           </motion.button>
-
-          {!showObstacleValue && !isRolling ? <p className="mt-6 text-xs text-deck-300">Obstáculo actual: {NO_OBSTACLE_LABEL}</p> : null}
         </div>
       ) : (
-        <div className="relative mx-auto w-full max-w-4xl py-6">
+        <div className="relative mx-auto w-full max-w-4xl py-1 sm:py-4">
           <RollResultTiles
             isRolling={isRolling}
             rollId={rollId}
@@ -95,19 +92,19 @@ export default function DicePage() {
 
           <RollSummary result={result} />
 
-          <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-4 flex flex-col gap-2 sm:mt-6 sm:flex-row sm:gap-3">
             <button
               type="button"
               onClick={rollDice}
               disabled={isRolling}
-              className="neo-button w-full justify-center py-3 text-base sm:w-auto sm:min-w-56"
+              className="neo-button w-full justify-center py-2.5 text-sm sm:w-auto sm:min-w-56 sm:py-3 sm:text-base"
             >
               🔁 Repetir tirada
             </button>
             <button
               type="button"
               onClick={resetResult}
-              className="w-full rounded-full border border-white/20 bg-white/5 px-5 py-3 text-base font-semibold text-deck-100 transition hover:border-white/35 hover:bg-white/10 sm:w-auto sm:min-w-56"
+              className="w-full rounded-full border border-white/20 bg-white/5 px-4 py-2.5 text-sm font-semibold text-deck-100 transition hover:border-white/35 hover:bg-white/10 sm:w-auto sm:min-w-56 sm:px-5 sm:py-3 sm:text-base"
             >
               ⚙ Cambiar configuración
             </button>
