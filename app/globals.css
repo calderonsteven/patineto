@@ -7,5 +7,35 @@
 }
 
 body {
-  @apply bg-deck-900 text-white antialiased;
+  @apply bg-deck-950 text-white antialiased;
+  background-image:
+    radial-gradient(circle at 15% 15%, rgba(167, 139, 250, 0.28), transparent 34%),
+    radial-gradient(circle at 85% 10%, rgba(34, 211, 238, 0.22), transparent 28%),
+    radial-gradient(circle at 50% 100%, rgba(244, 114, 182, 0.16), transparent 35%),
+    linear-gradient(160deg, #05070f 0%, #111827 42%, #0b1020 100%);
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.16;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.28) 0.6px, transparent 0.6px);
+  background-size: 3px 3px;
+}
+
+@layer components {
+  .neo-panel {
+    @apply rounded-2xl border border-white/10 bg-white/[0.06] shadow-2xl shadow-black/45 backdrop-blur-xl;
+  }
+
+  .neo-button {
+    @apply inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-hype-cyan to-hype-purple px-4 py-2 text-sm font-semibold text-deck-950 shadow-lg shadow-hype-cyan/30 transition hover:-translate-y-0.5 hover:brightness-110;
+  }
+
+  .surface-muted {
+    @apply rounded-xl border border-white/10 bg-black/25;
+  }
 }

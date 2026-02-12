@@ -23,9 +23,14 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body>
-        <header className="border-b border-deck-700 bg-deck-800/90 backdrop-blur">
+        <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+          <div className="absolute -left-24 top-10 h-72 w-72 rounded-full bg-hype-purple/25 blur-3xl" />
+          <div className="absolute right-0 top-40 h-80 w-80 rounded-full bg-hype-cyan/20 blur-3xl" />
+          <div className="absolute bottom-[-120px] left-1/3 h-80 w-80 rounded-full bg-hype-pink/20 blur-3xl" />
+        </div>
+        <header className="sticky top-0 z-20 border-b border-white/10 bg-deck-950/70 backdrop-blur-xl">
           <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-            <Link href="/" className="text-lg font-semibold tracking-tight text-white">
+            <Link href="/" className="rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-lg font-black tracking-tight text-white">
               Patineto
             </Link>
             <ul className="flex items-center gap-2 text-sm">
@@ -33,7 +38,7 @@ export default function RootLayout({
                 <li key={item.href}>
                   <Link
                     href={item.href}
-                    className="rounded-md px-3 py-2 text-deck-200 transition hover:bg-deck-700 hover:text-white"
+                    className="rounded-md px-3 py-2 text-deck-300 transition hover:bg-white/10 hover:text-white"
                   >
                     {item.label}
                   </Link>

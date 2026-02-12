@@ -12,7 +12,7 @@ export function DifficultySelector({ selectedDifficulty, onChangeDifficulty }: D
       {difficulties.map((difficulty) => (
         <label
           key={difficulty.value}
-          className="flex cursor-pointer items-start gap-3 rounded-lg border border-deck-700 bg-deck-900/60 p-3"
+          className="surface-muted flex cursor-pointer items-start gap-3 p-3"
         >
           <input
             type="radio"
@@ -24,7 +24,7 @@ export function DifficultySelector({ selectedDifficulty, onChangeDifficulty }: D
           />
           <span>
             <span className="block text-sm font-semibold text-white">{difficulty.label}</span>
-            <span className="text-xs text-deck-200">{difficulty.hint}</span>
+            <span className="text-xs text-deck-300">{difficulty.hint}</span>
           </span>
         </label>
       ))}

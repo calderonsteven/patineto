@@ -31,7 +31,7 @@ export function RollResultTiles({ isRolling, rollId, dynamics, result, preview, 
         return (
           <motion.div
             key={`${label}-${rollId}`}
-            className="min-h-24 rounded-lg border border-deck-700 bg-deck-900/70 p-3 text-center [backface-visibility:hidden] [transform-style:preserve-3d] sm:min-h-0 sm:p-4"
+            className="min-h-24 rounded-lg border border-white/15 bg-black/30 p-3 text-center shadow-lg shadow-black/35 [backface-visibility:hidden] [transform-style:preserve-3d] sm:min-h-0 sm:p-4"
             style={{ transformPerspective: 1100, transformOrigin: '50% 50%' }}
             initial={false}
             animate={
@@ -107,7 +107,7 @@ export function RollResultTiles({ isRolling, rollId, dynamics, result, preview, 
                   }
             }
           >
-            <p className="text-[10px] uppercase tracking-[0.16em] text-deck-200 sm:text-xs sm:tracking-[0.2em]">{label}</p>
+            <p className="text-[10px] uppercase tracking-[0.16em] text-deck-300 sm:text-xs sm:tracking-[0.2em]">{label}</p>
             <p className="mt-2 text-xs font-semibold text-white sm:text-sm">{value}</p>
           </motion.div>
         );
