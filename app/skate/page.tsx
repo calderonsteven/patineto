@@ -33,34 +33,7 @@ export default function SkatePage() {
             className="w-full rounded-md border border-white/20 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-deck-300 focus:border-hype-cyan focus:outline-none"
           />
         </div>
-
-        <a
-          href={youtubeSearchUrl || undefined}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-disabled={!youtubeSearchUrl}
-          className="neo-button w-fit aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-        >
-          Buscar en YouTube
-        </a>
-
-        <div className="surface-muted p-4 text-sm text-deck-300">
-          {youtubeSearchUrl ? (
-            <>
-              <p className="font-medium text-white">Link generado:</p>
-              <a
-                href={youtubeSearchUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 block break-all text-blue-300 underline decoration-blue-400/70 underline-offset-2"
-              >
-                {youtubeSearchUrl}
-              </a>
-            </>
-          ) : (
-            <p>Escribe un truco para generar el link de búsqueda en YouTube.</p>
-          )}
-        </div>
+        
         <TrickVideo trickName={trickName} />
       </div>
     </section>
