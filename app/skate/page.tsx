@@ -1,331 +1,498 @@
 'use client';
 
-import { TrickVideo } from '@/components/youtube/trick-video';
 import { useEffect, useMemo, useState } from 'react';
 
 type Player = {
   id: string;
   name: string;
-  letterCount: number; // 0-5
+  letterCount: number; // 0–5
+  eliminated: boolean;
 };
+
+type RoundResult = 'CAYÓ' | 'LO LOGRÓ';
 
 type GameState = {
   players: Player[];
-  currentPlayerIndex: number;
+  turnOrder: string[]; // player ids in order
+  currentTurnIndex: number; // index in turnOrder
   currentTrick: string;
-  trickHistory: string[];
+  history: { trick: string; player: string; result: RoundResult }[];
 };
 
+type Phase = 'setup' | 'order' | 'starting' | 'play';
+
 const LETTERS = ['S', 'K', 'A', 'T', 'E'] as const;
-const STORAGE_KEY = 'patineto-skate-game-state-v2';
+const STORAGE_KEY = 'patineto-skate-rapid-v1';
 
 const createId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-const defaultPlayers = (): Player[] => [
-  { id: createId(), name: 'Player 1', letterCount: 0 },
-  { id: createId(), name: 'Player 2', letterCount: 0 },
-];
+const createPlayer = (name: string): Player => ({
+  id: createId(),
+  name: name.trim(),
+  letterCount: 0,
+  eliminated: false,
+});
 
-const clamp = (value: number) => Math.max(0, Math.min(5, value));
+const shuffle = <T,>(items: T[]) => {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+};
+
+const clampLetterCount = (value: number) => Math.max(0, Math.min(5, value));
+
+const lettersForCount = (count: number) =>
+  LETTERS.map((letter, index) => (index < count ? letter : '_')).join(' ');
 
 export default function SkatePage() {
-  const [players, setPlayers] = useState<Player[]>(defaultPlayers);
-  const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
-  const [currentTrick, setCurrentTrick] = useState('');
-  const [trickHistory, setTrickHistory] = useState<string[]>([]);
-  const [trickDraft, setTrickDraft] = useState('');
+  const [phase, setPhase] = useState<Phase>('setup');
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [turnOrder, setTurnOrder] = useState<string[]>([]);
+  const [currentTurnIndex, setCurrentTurnIndex] = useState(0);
+  const [currentTrick, setCurrentTrick] = useState('Ollie');
+  const [history, setHistory] = useState<GameState['history']>([]);
   const [newPlayerName, setNewPlayerName] = useState('');
-  const [lastFailedPlayerId, setLastFailedPlayerId] = useState<string | null>(null);
-
-  const activePlayer = players[currentPlayerIndex] ?? null;
-
-  const normalizedHistory = useMemo(
-    () => new Set(trickHistory.map((trick) => trick.trim().toLowerCase())),
-    [trickHistory],
-  );
-
-  const trickWasUsedBefore = useMemo(() => {
-    const normalized = trickDraft.trim().toLowerCase();
-    if (!normalized) return false;
-    return normalizedHistory.has(normalized);
-  }, [normalizedHistory, trickDraft]);
-
-  const sortedPlayers = useMemo(
-    () => [...players].sort((a, b) => b.letterCount - a.letterCount || a.name.localeCompare(b.name)),
-    [players],
-  );
+  const [isEditingTrick, setIsEditingTrick] = useState(false);
+  const [trickDraft, setTrickDraft] = useState('');
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [startingPlayerName, setStartingPlayerName] = useState('');
+  const [rpsLabel, setRpsLabel] = useState('Piedra...');
 
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
 
     try {
-      const parsed = JSON.parse(raw) as Partial<GameState>;
-      const safePlayers = Array.isArray(parsed.players)
-        ? parsed.players.map((player, index) => ({
+      const parsed = JSON.parse(raw) as {
+        phase?: Phase;
+        game?: GameState;
+      };
+
+      const safePlayers = Array.isArray(parsed.game?.players)
+        ? parsed.game.players.map((player, index) => ({
             id: player.id || createId(),
             name: player.name?.trim() || `Player ${index + 1}`,
-            letterCount: clamp(Number(player.letterCount) || 0),
+            letterCount: clampLetterCount(Number(player.letterCount) || 0),
+            eliminated: Boolean(player.eliminated) || clampLetterCount(Number(player.letterCount) || 0) >= 5,
           }))
         : [];
 
-      setPlayers(safePlayers.length > 0 ? safePlayers : defaultPlayers());
-      setCurrentPlayerIndex(
-        safePlayers.length > 0
-          ? Math.max(0, Math.min(Number(parsed.currentPlayerIndex) || 0, safePlayers.length - 1))
-          : 0,
-      );
+      setPlayers(safePlayers);
+      setTurnOrder(Array.isArray(parsed.game?.turnOrder) ? parsed.game?.turnOrder.filter(Boolean) : []);
+      setCurrentTurnIndex(Math.max(0, Number(parsed.game?.currentTurnIndex) || 0));
+      setCurrentTrick(typeof parsed.game?.currentTrick === 'string' ? parsed.game.currentTrick : 'Ollie');
+      setHistory(Array.isArray(parsed.game?.history) ? parsed.game.history : []);
 
-      const trick = typeof parsed.currentTrick === 'string' ? parsed.currentTrick : '';
-      setCurrentTrick(trick);
-      setTrickDraft(trick);
-      setTrickHistory(Array.isArray(parsed.trickHistory) ? parsed.trickHistory.filter(Boolean) : []);
+      if (parsed.phase && ['setup', 'order', 'starting', 'play'].includes(parsed.phase)) {
+        setPhase(parsed.phase);
+      }
     } catch {
-      setPlayers(defaultPlayers());
-      setCurrentPlayerIndex(0);
-      setCurrentTrick('');
-      setTrickDraft('');
-      setTrickHistory([]);
+      localStorage.removeItem(STORAGE_KEY);
     }
   }, []);
 
   useEffect(() => {
-    const gameState: GameState = {
+    const game: GameState = {
       players,
-      currentPlayerIndex,
+      turnOrder,
+      currentTurnIndex,
       currentTrick,
-      trickHistory,
+      history,
     };
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(gameState));
-  }, [players, currentPlayerIndex, currentTrick, trickHistory]);
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        phase,
+        game,
+      }),
+    );
+  }, [phase, players, turnOrder, currentTurnIndex, currentTrick, history]);
+
+  const playersById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
+
+  const activeTurnOrder = useMemo(
+    () => turnOrder.filter((playerId) => {
+      const player = playersById.get(playerId);
+      return Boolean(player && !player.eliminated);
+    }),
+    [playersById, turnOrder],
+  );
 
   useEffect(() => {
-    if (!players.length) return;
-    if (currentPlayerIndex < players.length) return;
-    setCurrentPlayerIndex(0);
-  }, [currentPlayerIndex, players.length]);
+    if (phase !== 'starting') return;
+    if (!turnOrder.length) return;
 
-  useEffect(() => {
-    if (!lastFailedPlayerId) return;
-    const timeout = setTimeout(() => setLastFailedPlayerId(null), 350);
-    return () => clearTimeout(timeout);
-  }, [lastFailedPlayerId]);
+    const sequence = ['Piedra...', 'Papel...', 'Tijera...'];
+    sequence.forEach((label, index) => {
+      setTimeout(() => setRpsLabel(label), index * 450);
+    });
 
-  const addPlayer = (name: string) => {
-    const safeName = name.trim();
-    if (!safeName) return;
+    const finalTimeout = setTimeout(() => {
+      const randomId = turnOrder[Math.floor(Math.random() * turnOrder.length)];
+      const starterIndex = turnOrder.findIndex((id) => id === randomId);
+      const starterName = playersById.get(randomId)?.name || 'Jugador';
+      setCurrentTurnIndex(Math.max(0, starterIndex));
+      setStartingPlayerName(starterName);
+      setRpsLabel('¡Listo!');
 
-    setPlayers((prev) => [...prev, { id: createId(), name: safeName, letterCount: 0 }]);
+      setTimeout(() => {
+        setPhase('play');
+      }, 1000);
+    }, 1500);
+
+    return () => {
+      clearTimeout(finalTimeout);
+    };
+  }, [phase, turnOrder, playersById]);
+
+  const currentPlayerId = turnOrder[currentTurnIndex];
+  const currentPlayer = currentPlayerId ? playersById.get(currentPlayerId) : null;
+
+  const nextPlayerPreview = useMemo(() => {
+    if (!activeTurnOrder.length || !currentPlayerId) return null;
+    const indexInActive = activeTurnOrder.findIndex((id) => id === currentPlayerId);
+    const nextId = activeTurnOrder[(indexInActive + 1) % activeTurnOrder.length] ?? activeTurnOrder[0];
+    return playersById.get(nextId) ?? null;
+  }, [activeTurnOrder, currentPlayerId, playersById]);
+
+  const remainingPlayers = useMemo(() => players.filter((player) => !player.eliminated), [players]);
+
+  const addPlayer = () => {
+    const name = newPlayerName.trim();
+    if (!name) return;
+    setPlayers((prev) => [...prev, createPlayer(name)]);
     setNewPlayerName('');
   };
 
-  const editPlayer = (id: string, name: string) => {
+  const updatePlayer = (id: string, name: string) => {
     setPlayers((prev) => prev.map((player) => (player.id === id ? { ...player, name } : player)));
   };
 
-  const commitPlayerName = (id: string, fallbackIndex: number) => {
+  const commitPlayerName = (id: string, index: number) => {
     setPlayers((prev) =>
       prev.map((player) =>
-        player.id === id
-          ? { ...player, name: player.name.trim() || `Player ${fallbackIndex + 1}` }
-          : player,
+        player.id === id ? { ...player, name: player.name.trim() || `Player ${index + 1}` } : player,
       ),
     );
   };
 
-  const applyTrick = () => {
-    const safeTrick = trickDraft.trim();
-    if (!safeTrick) {
-      setCurrentTrick('');
+  const startGame = () => {
+    if (players.length < 2) return;
+    const cleanPlayers = players.map((player, index) => ({
+      ...player,
+      name: player.name.trim() || `Player ${index + 1}`,
+      letterCount: 0,
+      eliminated: false,
+    }));
+
+    const order = shuffle(cleanPlayers.map((player) => player.id));
+
+    setPlayers(cleanPlayers);
+    setTurnOrder(order);
+    setCurrentTurnIndex(0);
+    setCurrentTrick('Ollie');
+    setTrickDraft('Ollie');
+    setHistory([]);
+    setHistoryOpen(false);
+    setPhase('order');
+
+    setTimeout(() => {
+      setPhase('starting');
+    }, 900);
+  };
+
+  const moveToNextActivePlayer = (order: string[], fromPlayerId: string | undefined, allPlayers: Player[]) => {
+    if (!fromPlayerId) {
+      setCurrentTurnIndex(0);
       return;
     }
 
-    setCurrentTrick(safeTrick);
-    setTrickHistory((prev) => {
-      const normalized = safeTrick.toLowerCase();
-      return prev.some((item) => item.trim().toLowerCase() === normalized) ? prev : [...prev, safeTrick];
+    const aliveIds = order.filter((id) => {
+      const player = allPlayers.find((item) => item.id === id);
+      return Boolean(player && !player.eliminated);
     });
+
+    if (aliveIds.length <= 1) {
+      const winnerId = aliveIds[0];
+      const winnerIndex = winnerId ? order.findIndex((id) => id === winnerId) : 0;
+      setCurrentTurnIndex(Math.max(0, winnerIndex));
+      return;
+    }
+
+    const currentAliveIndex = aliveIds.findIndex((id) => id === fromPlayerId);
+    const nextAliveId = aliveIds[(currentAliveIndex + 1) % aliveIds.length] ?? aliveIds[0];
+    const globalIndex = order.findIndex((id) => id === nextAliveId);
+    setCurrentTurnIndex(Math.max(0, globalIndex));
   };
 
-  const failCurrentPlayer = () => {
-    if (!players.length) return;
+  const applyTurnResult = (result: RoundResult) => {
+    if (!currentPlayer) return;
 
-    const failedPlayer = players[currentPlayerIndex];
-    if (!failedPlayer) return;
+    const beforePlayerName = currentPlayer.name;
+    const trickUsed = currentTrick.trim() || 'Truco libre';
 
-    setLastFailedPlayerId(failedPlayer.id);
-    setPlayers((prev) =>
-      prev.map((player) =>
-        player.id === failedPlayer.id ? { ...player, letterCount: clamp(player.letterCount + 1) } : player,
-      ),
-    );
+    setPlayers((prev) => {
+      const updated = prev.map((player) => {
+        if (player.id !== currentPlayer.id) return player;
+        if (result !== 'CAYÓ') return player;
+
+        const nextCount = clampLetterCount(player.letterCount + 1);
+        return {
+          ...player,
+          letterCount: nextCount,
+          eliminated: nextCount >= 5,
+        };
+      });
+
+      moveToNextActivePlayer(turnOrder, currentPlayer.id, updated);
+      return updated;
+    });
+
+    setHistory((prev) => [...prev, { trick: trickUsed, player: beforePlayerName, result }]);
   };
 
-  const nextTurn = () => {
-    if (players.length <= 1) return;
-    setCurrentPlayerIndex((prev) => (prev + 1) % players.length);
-  };
-
-  const resetGame = () => {
-    setPlayers((prev) => prev.map((player) => ({ ...player, letterCount: 0 })));
-    setCurrentPlayerIndex(0);
-    setCurrentTrick('');
-    setTrickDraft('');
-    setTrickHistory([]);
-    setLastFailedPlayerId(null);
+  const resetRound = () => {
+    setPlayers((prev) => prev.map((player) => ({ ...player, letterCount: 0, eliminated: false })));
+    setCurrentTurnIndex(0);
+    setCurrentTrick('Ollie');
+    setTrickDraft('Ollie');
+    setHistory([]);
+    setPhase(turnOrder.length ? 'play' : 'setup');
   };
 
   const newGame = () => {
+    setPhase('setup');
     setPlayers([]);
-    setCurrentPlayerIndex(0);
-    setCurrentTrick('');
+    setTurnOrder([]);
+    setCurrentTurnIndex(0);
+    setCurrentTrick('Ollie');
     setTrickDraft('');
-    setTrickHistory([]);
+    setHistory([]);
     setNewPlayerName('');
-    setLastFailedPlayerId(null);
+    setHistoryOpen(false);
+    setStartingPlayerName('');
+    setRpsLabel('Piedra...');
     localStorage.removeItem(STORAGE_KEY);
   };
 
+  const gameHasWinner = phase === 'play' && remainingPlayers.length === 1;
+  const winner = gameHasWinner ? remainingPlayers[0] : null;
+
   return (
-    <section className="max-w-xl mx-auto py-8 space-y-6">
-      <div className="rounded-2xl border border-white/10 bg-black/30 p-5 space-y-4">
-        <h1 className="text-4xl font-bold text-center uppercase">{currentTrick || 'SET A TRICK'}</h1>
+    <section className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-4 py-8">
+      {phase === 'setup' && (
+        <div className="space-y-5">
+          <h1 className="text-center text-3xl font-black">Juego de S.K.A.T.E</h1>
+          <p className="text-center text-sm text-deck-300">Agrega al menos 2 jugadores para comenzar.</p>
 
-        {trickWasUsedBefore && (
-          <p className="mx-auto w-fit rounded-full border border-amber-300/50 bg-amber-400/20 px-3 py-1 text-xs font-semibold text-amber-200">
-            This trick was used before
-          </p>
-        )}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              type="text"
+              value={newPlayerName}
+              onChange={(event) => setNewPlayerName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  addPlayer();
+                }
+              }}
+              placeholder="Nombre del jugador"
+              className="w-full rounded-lg border border-white/15 bg-black/35 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              type="button"
+              onClick={addPlayer}
+              className="rounded-lg border border-indigo-400/40 bg-indigo-500/20 px-4 py-2 font-semibold text-indigo-100"
+            >
+              Añadir
+            </button>
+          </div>
 
-        <input
-          type="text"
-          value={trickDraft}
-          onChange={(event) => setTrickDraft(event.target.value)}
-          onBlur={applyTrick}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault();
-              applyTrick();
-            }
-          }}
-          placeholder="Type current trick and press Enter"
-          className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-
-        <TrickVideo trickName={trickDraft || currentTrick} />
-      </div>
-
-      <div className="rounded-2xl border border-white/10 bg-black/30 p-5 space-y-5">
-        <div className="text-3xl font-semibold text-center mt-4">{activePlayer?.name || 'No players yet'}</div>
-
-        <div className="flex justify-center space-x-2 text-xl">
-          {LETTERS.map((letter, index) => {
-            const owned = index < (activePlayer?.letterCount ?? 0);
-            const animated = owned && lastFailedPlayerId === activePlayer?.id && index === (activePlayer?.letterCount ?? 0) - 1;
-
-            return (
-              <span
-                key={`${activePlayer?.id ?? 'none'}-${letter}`}
-                className={`w-9 h-11 rounded-md border flex items-center justify-center font-bold transition-all duration-300 ${
-                  owned
-                    ? 'border-rose-300/70 text-rose-200 bg-rose-500/20'
-                    : 'border-white/10 text-white/30 bg-white/5'
-                } ${animated ? 'scale-110' : 'scale-100'}`}
-              >
-                {letter}
-              </span>
-            );
-          })}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={failCurrentPlayer}
-            disabled={!activePlayer}
-            className="w-full rounded-lg px-4 py-3 font-semibold bg-red-500 text-white disabled:opacity-40"
-          >
-            Fail
-          </button>
-          <button
-            type="button"
-            onClick={nextTurn}
-            disabled={!activePlayer || players.length <= 1}
-            className="w-full rounded-lg px-4 py-3 font-semibold bg-indigo-600 text-white disabled:opacity-40"
-          >
-            Next Turn
-          </button>
-          <button
-            type="button"
-            onClick={resetGame}
-            className="w-full rounded-lg px-4 py-3 font-semibold bg-yellow-400 text-black"
-          >
-            Reset Game (keep players)
-          </button>
-          <button
-            type="button"
-            onClick={newGame}
-            className="w-full rounded-lg px-4 py-3 font-semibold border border-red-500 text-red-500"
-          >
-            New Game (clear everything)
-          </button>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-white/10 bg-black/30 p-4 space-y-3">
-        <div className="flex flex-wrap gap-2">
-          {sortedPlayers.map((player) => (
-            <div key={player.id} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 min-w-[9rem]">
-              <p className="text-sm font-semibold truncate">{player.name}</p>
-              <p className="mt-1 text-xs tracking-[0.28em] text-white/75">
-                {LETTERS.map((letter, index) => (index < player.letterCount ? letter : '_')).join(' ')}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-2 pt-1">
-          <input
-            type="text"
-            value={newPlayerName}
-            onChange={(event) => setNewPlayerName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                addPlayer(newPlayerName);
-              }
-            }}
-            placeholder="Add player"
-            className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <button
-            type="button"
-            onClick={() => addPlayer(newPlayerName)}
-            className="rounded-lg border border-indigo-400/50 bg-indigo-500/20 px-4 py-2 text-sm font-semibold text-indigo-200"
-          >
-            Add
-          </button>
-        </div>
-
-        {players.length > 0 && (
           <div className="space-y-2">
             {players.map((player, index) => (
               <input
                 key={player.id}
                 type="text"
                 value={player.name}
-                onChange={(event) => editPlayer(player.id, event.target.value)}
+                onChange={(event) => updatePlayer(player.id, event.target.value)}
                 onBlur={() => commitPlayerName(player.id, index)}
-                className="w-full rounded-lg border border-white/10 bg-black/35 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             ))}
           </div>
-        )}
-      </div>
+
+          <button
+            type="button"
+            onClick={startGame}
+            disabled={players.length < 2}
+            className="w-full rounded-xl bg-indigo-600 px-4 py-4 text-lg font-bold text-white disabled:opacity-40"
+          >
+            Iniciar juego
+          </button>
+        </div>
+      )}
+
+      {phase === 'order' && (
+        <div className="space-y-5 text-center">
+          <h2 className="text-2xl font-bold">Orden de turnos</h2>
+          <div className="flex flex-wrap justify-center gap-2">
+            {turnOrder.map((playerId, index) => (
+              <span key={playerId} className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-sm">
+                {index + 1}. {playersById.get(playerId)?.name}
+              </span>
+            ))}
+          </div>
+          <p className="text-sm text-deck-300">Preparando quién empieza...</p>
+        </div>
+      )}
+
+      {phase === 'starting' && (
+        <div className="space-y-5 text-center">
+          <h2 className="text-2xl font-bold">Piedra, papel o tijera</h2>
+          <p className="text-3xl font-extrabold text-hype-cyan">{rpsLabel}</p>
+          <p className="text-lg font-semibold">Empieza: {startingPlayerName || '...'}</p>
+        </div>
+      )}
+
+      {phase === 'play' && (
+        <div className="space-y-5">
+          <div className="rounded-xl border border-white/10 bg-black/25 p-3 text-center text-xs sm:text-sm">
+            <div className="flex flex-wrap justify-center gap-2">
+              {turnOrder.map((playerId) => {
+                const player = playersById.get(playerId);
+                if (!player) return null;
+
+                const severityClass = player.eliminated
+                  ? 'opacity-40'
+                  : player.letterCount >= 4
+                    ? 'text-red-300'
+                    : player.letterCount >= 2
+                      ? 'text-amber-300'
+                      : 'text-white';
+
+                return (
+                  <span key={`status-${player.id}`} className={severityClass}>
+                    {player.name}: {lettersForCount(player.letterCount)}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-2 text-center">
+            <p className="text-xs uppercase tracking-[0.18em] text-white/60">Turno actual</p>
+            <h2 className="text-4xl font-black">{winner ? `🏆 ${winner.name}` : currentPlayer?.name || 'Sin jugador'}</h2>
+            {!winner && nextPlayerPreview && (
+              <p className="text-sm text-white/70">Siguiente: ↻ {nextPlayerPreview.name}</p>
+            )}
+          </div>
+
+          {!winner && (
+            <>
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center">
+                <p className="text-xs uppercase tracking-[0.18em] text-white/60">Truco actual</p>
+                <p className="mt-1 text-3xl font-bold uppercase">{currentTrick || 'TRUCO LIBRE'}</p>
+
+                {!isEditingTrick ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTrickDraft(currentTrick);
+                      setIsEditingTrick(true);
+                    }}
+                    className="mt-3 rounded-lg border border-white/20 px-3 py-2 text-sm font-semibold"
+                  >
+                    Editar truco actual
+                  </button>
+                ) : (
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <input
+                      type="text"
+                      value={trickDraft}
+                      onChange={(event) => setTrickDraft(event.target.value)}
+                      placeholder="Escribe el truco"
+                      className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCurrentTrick(trickDraft.trim() || 'Truco libre');
+                        setIsEditingTrick(false);
+                      }}
+                      className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white"
+                    >
+                      Guardar
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => applyTurnResult('CAYÓ')}
+                  className="rounded-xl bg-red-500 px-4 py-5 text-xl font-black text-white"
+                >
+                  CAYÓ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyTurnResult('LO LOGRÓ')}
+                  className="rounded-xl bg-emerald-500 px-4 py-5 text-xl font-black text-white"
+                >
+                  LO LOGRÓ
+                </button>
+              </div>
+            </>
+          )}
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={resetRound}
+              className="rounded-lg bg-yellow-400 px-4 py-3 font-semibold text-black"
+            >
+              Reiniciar ronda
+            </button>
+            <button
+              type="button"
+              onClick={newGame}
+              className="rounded-lg border border-red-500 px-4 py-3 font-semibold text-red-400"
+            >
+              Nueva partida
+            </button>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-black/25">
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((prev) => !prev)}
+              className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold"
+            >
+              Historial rápido
+              <span>{historyOpen ? '−' : '+'}</span>
+            </button>
+
+            {historyOpen && (
+              <ul className="space-y-1 border-t border-white/10 px-4 py-3 text-sm text-white/80">
+                {history.length === 0 && <li>No hay rondas todavía.</li>}
+                {history.map((item, index) => (
+                  <li key={`${item.player}-${index}`}>
+                    R{index + 1}: {item.trick} — {item.player} {item.result}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
