@@ -24,6 +24,8 @@ type DiceResult = {
   trick: Trick;
 };
 
+const NO_OBSTACLE_LABEL = 'Sin obstáculo';
+
 type RollDynamics = {
   durationMs: number;
   staggerMs: number;
@@ -152,6 +154,7 @@ export default function DicePage() {
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>('principiante');
   const [isRolling, setIsRolling] = useState(false);
   const [rollId, setRollId] = useState(0);
+  const [includeObstacle, setIncludeObstacle] = useState(false);
   const [dynamics, setDynamics] = useState<RollDynamics>(defaultRollDynamics);
   const [result, setResult] = useState<DiceResult | null>(null);
   const [preview, setPreview] = useState<Omit<DiceResult, 'adaptedDifficulty'> | null>(null);
@@ -170,7 +173,7 @@ export default function DicePage() {
     const finalResult: DiceResult = {
       adaptedDifficulty,
       stance: randomFrom(pool.stance),
-      obstacle: randomFrom(pool.obstacle),
+      obstacle: includeObstacle ? randomFrom(pool.obstacle) : NO_OBSTACLE_LABEL,
       trick: randomFrom(pool.tricks),
     };
 
@@ -182,10 +185,10 @@ export default function DicePage() {
     const tickInterval = window.setInterval(() => {
       setPreview({
         stance: randomFrom(activePool.stance),
-        obstacle: randomFrom(activePool.obstacle),
+        obstacle: includeObstacle ? randomFrom(activePool.obstacle) : NO_OBSTACLE_LABEL,
         trick: randomFrom(activePool.tricks),
       });
-    }, 110);
+    }, includeObstacle ? 110 : 95);
 
     window.setTimeout(() => {
       window.clearInterval(tickInterval);
@@ -196,6 +199,8 @@ export default function DicePage() {
   };
 
   const tileLabels = ['Postura', 'Obstáculo', 'Truco'] as const;
+
+  const showObstacleValue = includeObstacle || isRolling || Boolean(result);
 
   return (
     <section className="space-y-6 sm:space-y-8">
@@ -238,6 +243,21 @@ export default function DicePage() {
             <p className="mt-2">Trucos disponibles: {activePool.tricks.map((trick) => trick.name).join(' · ')}</p>
           </div>
 
+
+
+          <label className="mt-6 flex items-center gap-3 rounded-lg border border-deck-700 bg-deck-900/60 p-3 text-sm">
+            <input
+              type="checkbox"
+              checked={includeObstacle}
+              onChange={(event) => setIncludeObstacle(event.target.checked)}
+              className="h-4 w-4"
+            />
+            <span>
+              <span className="block font-semibold text-white">Incluir obstáculo</span>
+              <span className="text-xs text-deck-200">Por defecto va apagado para jugar rápido en calle.</span>
+            </span>
+          </label>
+
           <button
             type="button"
             onClick={rollDice}
@@ -271,44 +291,85 @@ export default function DicePage() {
                     ? result?.obstacle
                     : result?.trick.name;
 
-              const value = isRolling ? previewValue ?? '...' : finalValue ?? '—';
-              const spinX = dynamics.baseSpinDeg + index * 120;
-              const spinY = dynamics.baseSpinDeg - index * 85;
-              const spinZ = Math.round(dynamics.baseSpinDeg * 0.45) + index * 45;
+              const baseValue = isRolling ? previewValue ?? '...' : finalValue ?? '—';
+              const value =
+                label === 'Obstáculo' && !showObstacleValue && !isRolling ? NO_OBSTACLE_LABEL : baseValue;
+              const spinX = 180 + dynamics.tiltDeg * 2 + index * 18;
+              const spinY = -(170 + dynamics.tiltDeg * 1.5 + index * 14);
+              const spinZ = 120 + index * 22;
 
               return (
                 <motion.div
                   key={`${label}-${rollId}`}
-                  className="min-h-24 rounded-lg border border-deck-700 bg-deck-900/70 p-3 text-center [transform-style:preserve-3d] sm:min-h-0 sm:p-4"
+                  className="min-h-24 rounded-lg border border-deck-700 bg-deck-900/70 p-3 text-center [backface-visibility:hidden] [transform-style:preserve-3d] sm:min-h-0 sm:p-4"
                   style={{ transformPerspective: 1100, transformOrigin: '50% 50%' }}
                   initial={false}
                   animate={
                     isRolling
                       ? {
-                          x: [0, dynamics.shakePx, -dynamics.shakePx, dynamics.shakePx * 0.6, 0],
-                          y: [0, -8, 5, -2, 0],
-                          rotateX: [0, spinX, spinX + dynamics.tiltDeg],
-                          rotateY: [0, spinY, spinY - dynamics.tiltDeg],
+                          x: [0, dynamics.shakePx, -dynamics.shakePx, 0],
+                          y: [0, -6, 4, 0],
+                          rotateX: [0, spinX],
+                          rotateY: [0, spinY],
                           rotateZ: [0, spinZ],
-                          scale: [1, 1.06, 1.01, 1],
-                          filter: ['blur(0px)', 'blur(2px)', 'blur(1px)', 'blur(0px)'],
+                          scale: [1, 1.05, 1],
+                          filter: ['blur(0px)', 'blur(1.8px)', 'blur(0px)'],
                         }
                       : {
                           x: 0,
                           y: 0,
-                          rotateX: [dynamics.tiltDeg * 0.4, -dynamics.tiltDeg * 0.2, 0],
-                          rotateY: [-dynamics.tiltDeg * 0.4, dynamics.tiltDeg * 0.2, 0],
+                          rotateX: 0,
+                          rotateY: 0,
                           rotateZ: 0,
-                          scale: [1.02, 0.99, 1],
+                          scale: 1,
                           filter: 'blur(0px)',
                         }
                   }
                   transition={
                     isRolling
                       ? {
-                          duration: dynamics.durationMs / 1000,
-                          delay: (index * dynamics.staggerMs) / 1000,
-                          ease: [0.22, 1, 0.36, 1],
+                          x: {
+                            duration: 0.34,
+                            delay: (index * dynamics.staggerMs) / 1000,
+                            repeat: Infinity,
+                            ease: 'easeInOut',
+                          },
+                          y: {
+                            duration: 0.34,
+                            delay: (index * dynamics.staggerMs) / 1000,
+                            repeat: Infinity,
+                            ease: 'easeInOut',
+                          },
+                          rotateX: {
+                            duration: 0.48,
+                            delay: (index * dynamics.staggerMs) / 1000,
+                            repeat: Infinity,
+                            ease: 'linear',
+                          },
+                          rotateY: {
+                            duration: 0.52,
+                            delay: (index * dynamics.staggerMs) / 1000,
+                            repeat: Infinity,
+                            ease: 'linear',
+                          },
+                          rotateZ: {
+                            duration: 0.58,
+                            delay: (index * dynamics.staggerMs) / 1000,
+                            repeat: Infinity,
+                            ease: 'linear',
+                          },
+                          scale: {
+                            duration: 0.4,
+                            delay: (index * dynamics.staggerMs) / 1000,
+                            repeat: Infinity,
+                            ease: 'easeInOut',
+                          },
+                          filter: {
+                            duration: 0.32,
+                            delay: (index * dynamics.staggerMs) / 1000,
+                            repeat: Infinity,
+                            ease: 'easeInOut',
+                          },
                         }
                       : {
                           duration: 0.28,
