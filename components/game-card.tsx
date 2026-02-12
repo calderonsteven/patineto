@@ -11,6 +11,7 @@ export function GameCard({ title, description, href, status }: GameCardProps) {
   const statusStyles = {
     Diseño: 'text-hype-purple border-hype-purple/40 bg-hype-purple/10',
     Activo: 'text-hype-cyan border-hype-cyan/40 bg-hype-cyan/10',
+    Nuevo: 'text-emerald-300 border-emerald-300/40 bg-emerald-400/10',
     'Próximamente': 'text-hype-pink border-hype-pink/40 bg-hype-pink/10',
   };
 
