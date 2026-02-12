@@ -408,7 +408,7 @@ export default function SkatePage() {
 
       {phase === 'starting' && (
         <div className="space-y-5 text-center">
-          <h2 className="text-2xl font-bold">🪨 📄 ✂️ Piedra, papel o tijera</h2>
+          <h2 className="text-2xl font-bold">Piedra, papel o tijera</h2>
           <p className="text-3xl font-extrabold text-hype-cyan">{rpsLabel}</p>
           <p className="text-lg font-semibold">Empieza: {startingPlayerName || '...'}</p>
         </div>

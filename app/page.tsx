@@ -34,15 +34,11 @@ const games = [
 export default function HomePage() {
   return (
     <section className="space-y-10">
-      <header className="neo-panel max-w-4xl space-y-4 p-7">
-        <p className="text-sm uppercase tracking-[0.24em] text-hype-cyan">Patineto · Beta</p>
+      <header className="neo-panel space-y-4 p-7">
+        <p className="text-sm uppercase tracking-[0.24em] text-hype-cyan">Patineto</p>
         <h1 className="text-4xl font-black tracking-tight sm:text-6xl">Escoge tu juego</h1>
         <p className="text-base leading-7 text-deck-300 sm:text-lg">
-          Esta versión inicial define rutas, diseño y estructura de mini-apps. La lógica real de los juegos se
-          implementará en la siguiente fase.
-        </p>
-        <p className="inline-flex rounded-full border border-white/15 bg-black/25 px-4 py-1 text-xs font-medium uppercase tracking-[0.18em] text-deck-300">
-          Street-ready UI · menos gris, más actitud
+          Por 🛹 para 🛹
         </p>
       </header>
 
