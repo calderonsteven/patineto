@@ -23,6 +23,13 @@ const games = [
     status: 'Nuevo' as const,
   },
   {
+    title: 'Reto del Día',
+    description:
+      'Prueba de concepto para cumplir una meta diaria con progreso visual, mensajes motivadores y estado completado.',
+    href: '/reto-del-dia',
+    status: 'Nuevo' as const,
+  },
+  {
     title: 'Perfil y stats',
     description:
       'Módulo futuro para ver progreso, historial y retos entre amigos. Por ahora queda como vista placeholder.',

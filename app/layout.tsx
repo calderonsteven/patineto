@@ -11,6 +11,7 @@ export const metadata: Metadata = {
 
 const navItems = [
   { href: '/', label: 'Home' },
+  { href: '/reto-del-dia', label: 'Reto del Día' },
   { href: '/skate', label: 'S.K.A.T.E' },
   { href: '/dice', label: 'Dados' },
   { href: '/profile', label: 'Perfil' },
