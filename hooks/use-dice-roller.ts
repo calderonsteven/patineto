@@ -48,6 +48,15 @@ export function useDiceRoller() {
     }, nextDynamics.durationMs);
   };
 
+  const resetResult = () => {
+    if (isRolling) {
+      return;
+    }
+
+    setResult(null);
+    setPreview(null);
+  };
+
   return {
     selectedDifficulty,
     setSelectedDifficulty,
@@ -60,5 +69,6 @@ export function useDiceRoller() {
     preview,
     activePool,
     rollDice,
+    resetResult,
   };
 }

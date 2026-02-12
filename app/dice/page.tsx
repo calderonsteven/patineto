@@ -1,9 +1,10 @@
 'use client';
 
+import { motion } from 'framer-motion';
+
 import { DifficultySelector } from '@/components/dice/difficulty-selector';
 import { RollResultTiles } from '@/components/dice/roll-result-tiles';
 import { RollSummary } from '@/components/dice/roll-summary';
-import { NO_OBSTACLE_LABEL } from '@/features/dice/config';
 import { useDiceRoller } from '@/hooks/use-dice-roller';
 
 export default function DicePage() {
@@ -17,62 +18,69 @@ export default function DicePage() {
     dynamics,
     result,
     preview,
-    activePool,
     rollDice,
+    resetResult,
   } = useDiceRoller();
 
   const showObstacleValue = includeObstacle || isRolling || Boolean(result);
-  return (
-    <section className="space-y-6 sm:space-y-8">
-      <header className="neo-panel space-y-2 p-6 sm:p-7">
-        <p className="text-sm uppercase tracking-[0.2em] text-hype-cyan">Módulo</p>
-        <h1 className="text-2xl font-black tracking-tight sm:text-4xl">Juego de Dados</h1>
-        <p className="max-w-3xl text-deck-300">
-          Elige una dificultad y lanza los dados para generar un reto de skate con postura, obstáculo y truco.
-          Ajustamos automáticamente la complejidad para mantener variedad sin romper tu nivel.
-        </p>
-      </header>
+  const hasResult = Boolean(result);
 
-      <div className="grid gap-4 sm:gap-6 lg:grid-cols-[1fr_1.2fr]">
-        <article className="neo-panel p-4 sm:p-6">
-          <h2 className="text-xl font-semibold">1) Selecciona dificultad</h2>
+  return (
+    <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#111235] via-[#191b44] to-[#22144f] px-3 py-5 shadow-2xl shadow-black/35 sm:rounded-3xl sm:px-6 sm:py-10">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(34,211,238,0.14),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(168,85,247,0.2),transparent_38%)]" />
+
+      {!hasResult ? (
+        <div className="relative mx-auto flex min-h-[66vh] w-full max-w-3xl flex-col items-center justify-center">
+          <h1 className="text-center text-[10px] uppercase tracking-[0.34em] text-hype-cyan/80 sm:text-xs">Juego de Dados</h1>
+
           <DifficultySelector selectedDifficulty={selectedDifficulty} onChangeDifficulty={setSelectedDifficulty} />
 
-          <div className="surface-muted mt-6 p-4 text-sm text-deck-300">
-            <p className="font-semibold text-white">Banco actual ({selectedDifficulty})</p>
-            <p className="mt-2">Trucos disponibles: {activePool.tricks.map((trick) => trick.name).join(' · ')}</p>
-          </div>
-
-          <label className="surface-muted mt-6 flex items-center gap-3 p-3 text-sm">
-            <input
-              type="checkbox"
-              checked={includeObstacle}
-              onChange={(event) => setIncludeObstacle(event.target.checked)}
-              className="h-4 w-4"
-            />
-            <span>
-              <span className="block font-semibold text-white">Incluir obstáculo</span>
-              <span className="text-xs text-deck-300">Por defecto va apagado para jugar rápido en calle.</span>
-            </span>
+          <label className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-1.5 text-xs text-deck-200 sm:mt-6 sm:gap-3 sm:px-4 sm:py-2 sm:text-sm">
+            <span>Incluir obstáculo</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={includeObstacle}
+              onClick={() => setIncludeObstacle(!includeObstacle)}
+              className={`relative h-5 w-10 rounded-full transition sm:h-6 sm:w-11 ${includeObstacle ? 'bg-hype-cyan' : 'bg-white/20'}`}
+            >
+              <span
+                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition sm:h-5 sm:w-5 ${includeObstacle ? 'left-[20px] sm:left-[22px]' : 'left-0.5'}`}
+              />
+            </button>
           </label>
 
-          <button
+          <motion.button
             type="button"
             onClick={rollDice}
             disabled={isRolling}
-            className="neo-button mt-6 w-full disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+            className="mt-8 h-44 w-44 rounded-full border border-white/20 bg-white/10 text-xl font-black uppercase tracking-[0.11em] text-white shadow-[0_0_50px_rgba(34,211,238,0.3)] transition hover:scale-[1.02] disabled:cursor-not-allowed sm:mt-10 sm:h-52 sm:w-52 sm:text-2xl"
+            animate={
+              isRolling
+                ? {
+                    scale: [1, 1.08, 1.03, 1],
+                    x: [0, -3, 3, -2, 0],
+                  }
+                : {
+                    scale: 1,
+                    x: 0,
+                  }
+            }
+            transition={
+              isRolling
+                ? {
+                    duration: 0.5,
+                    repeat: Infinity,
+                    ease: 'easeInOut',
+                  }
+                : { duration: 0.2 }
+            }
           >
-            {isRolling ? 'Girando dados...' : 'Lanzar dados'}
-          </button>
-          <p className="mt-3 text-xs text-deck-300">
-            Preset realista: {Math.round(dynamics.durationMs / 10) / 100}s, stagger {dynamics.staggerMs}ms, shake{' '}
-            {dynamics.shakePx}px.
-          </p>
-        </article>
-
-        <article className="neo-panel p-4 sm:p-6">
-          <h2 className="text-xl font-semibold">2) Resultado</h2>
-
+            {isRolling ? 'Rodando...' : 'Lanzar'}
+          </motion.button>
+        </div>
+      ) : (
+        <div className="relative mx-auto w-full max-w-4xl py-1 sm:py-4">
           <RollResultTiles
             isRolling={isRolling}
             rollId={rollId}
@@ -82,13 +90,27 @@ export default function DicePage() {
             showObstacleValue={showObstacleValue}
           />
 
-          {!showObstacleValue && !isRolling && !result ? (
-            <p className="mt-3 text-xs text-deck-300">Obstáculo actual: {NO_OBSTACLE_LABEL}</p>
-          ) : null}
-
           <RollSummary result={result} />
-        </article>
-      </div>
+
+          <div className="mt-4 flex flex-col gap-2 sm:mt-6 sm:flex-row sm:gap-3">
+            <button
+              type="button"
+              onClick={rollDice}
+              disabled={isRolling}
+              className="neo-button w-full justify-center py-2.5 text-sm sm:w-auto sm:min-w-56 sm:py-3 sm:text-base"
+            >
+              🔁 Repetir tirada
+            </button>
+            <button
+              type="button"
+              onClick={resetResult}
+              className="w-full rounded-full border border-white/20 bg-white/5 px-4 py-2.5 text-sm font-semibold text-deck-100 transition hover:border-white/35 hover:bg-white/10 sm:w-auto sm:min-w-56 sm:px-5 sm:py-3 sm:text-base"
+            >
+              ⚙ Cambiar configuración
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

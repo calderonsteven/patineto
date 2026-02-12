@@ -7,13 +7,16 @@ type RollSummaryProps = {
 
 export function RollSummary({ result }: RollSummaryProps) {
   if (!result) {
-    return <p className="mt-5 text-sm text-deck-300">Lanza los dados para recibir tu próximo reto.</p>;
+    return null;
   }
 
   return (
-    <div className="mt-5 rounded-lg border border-hype-cyan/40 bg-hype-cyan/10 p-4 text-sm shadow-lg shadow-hype-cyan/10">
-      <p className="font-semibold text-lime-200">Dificultad aplicada: {result.adaptedDifficulty}</p>
-      <p className="mt-1 text-white">Tip: {result.trick.note}</p>
+    <div className="mt-4 space-y-3 sm:mt-8 sm:space-y-4">
+      <div className="rounded-xl border border-white/15 bg-white/[0.04] p-4 sm:rounded-2xl sm:p-5">
+        <p className="text-[10px] uppercase tracking-[0.16em] text-deck-300 sm:text-xs sm:tracking-[0.2em]">Ver tutorial</p>
+        <p className="mt-1.5 text-xs text-deck-300 sm:mt-2 sm:text-sm">Dificultad aplicada: {result.adaptedDifficulty}</p>
+        <p className="mt-1 text-sm text-white sm:text-base">Tip: {result.trick.note}</p>
+      </div>
 
       <TrickVideo trickName={result.trick.name} />
     </div>
