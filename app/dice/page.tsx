@@ -4,9 +4,7 @@ import { DifficultySelector } from '@/components/dice/difficulty-selector';
 import { RollResultTiles } from '@/components/dice/roll-result-tiles';
 import { RollSummary } from '@/components/dice/roll-summary';
 import { NO_OBSTACLE_LABEL } from '@/features/dice/config';
-import { buildResultQuery } from '@/features/dice/utils';
 import { useDiceRoller } from '@/hooks/use-dice-roller';
-import { useYoutubeSearchUrl } from '@/hooks/use-youtube-search-url';
 
 export default function DicePage() {
   const {
@@ -24,8 +22,6 @@ export default function DicePage() {
   } = useDiceRoller();
 
   const showObstacleValue = includeObstacle || isRolling || Boolean(result);
-  const youtubeSearchUrl = useYoutubeSearchUrl(buildResultQuery(result));
-
   return (
     <section className="space-y-6 sm:space-y-8">
       <header className="neo-panel space-y-2 p-6 sm:p-7">
@@ -90,7 +86,7 @@ export default function DicePage() {
             <p className="mt-3 text-xs text-deck-300">Obstáculo actual: {NO_OBSTACLE_LABEL}</p>
           ) : null}
 
-          <RollSummary result={result} youtubeSearchUrl={youtubeSearchUrl} />
+          <RollSummary result={result} />
         </article>
       </div>
     </section>

@@ -23,3 +23,14 @@ npm run dev
 ```
 
 Abre `http://localhost:3000`.
+
+## Variable de entorno requerida
+
+Para habilitar la búsqueda automática de videos en YouTube (primer resultado), configura:
+
+```bash
+YOUTUBE_API_KEY=tu_api_key
+```
+
+En desarrollo puedes guardarla en `.env.local`. Esta clave se usa solo en el endpoint server-side `app/api/youtube/search/route.ts` y no se expone al cliente.
+

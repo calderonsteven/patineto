@@ -1,11 +1,11 @@
+import { TrickVideo } from '@/components/youtube/trick-video';
 import { DiceResult } from '@/features/dice/types';
 
 type RollSummaryProps = {
   result: DiceResult | null;
-  youtubeSearchUrl: string;
 };
 
-export function RollSummary({ result, youtubeSearchUrl }: RollSummaryProps) {
+export function RollSummary({ result }: RollSummaryProps) {
   if (!result) {
     return <p className="mt-5 text-sm text-deck-300">Lanza los dados para recibir tu próximo reto.</p>;
   }
@@ -34,6 +34,8 @@ export function RollSummary({ result, youtubeSearchUrl }: RollSummaryProps) {
           {youtubeSearchUrl}
         </a>
       </div>
+
+      <TrickVideo trickName={result.trick.name} />
     </div>
   );
 }

@@ -1,11 +1,10 @@
 'use client';
 
-import { useYoutubeSearchUrl } from '@/hooks/use-youtube-search-url';
+import { TrickVideo } from '@/components/youtube/trick-video';
 import { useState } from 'react';
 
 export default function SkatePage() {
-  const [trick, setTrick] = useState('');
-  const youtubeSearchUrl = useYoutubeSearchUrl(`${trick.trim()} skate trick`);
+  const [trickName, setTrickName] = useState('');
 
   return (
     <section className="space-y-6">
@@ -28,8 +27,8 @@ export default function SkatePage() {
           <input
             id="trick-name"
             type="text"
-            value={trick}
-            onChange={(event) => setTrick(event.target.value)}
+            value={trickName}
+            onChange={(event) => setTrickName(event.target.value)}
             placeholder="Ejemplo: kickflip"
             className="w-full rounded-md border border-white/20 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-deck-300 focus:border-hype-cyan focus:outline-none"
           />
@@ -62,6 +61,7 @@ export default function SkatePage() {
             <p>Escribe un truco para generar el link de búsqueda en YouTube.</p>
           )}
         </div>
+        <TrickVideo trickName={trickName} />
       </div>
     </section>
   );
