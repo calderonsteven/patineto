@@ -1,20 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useYoutubeSearchUrl } from '@/hooks/use-youtube-search-url';
+import { useState } from 'react';
 
 export default function SkatePage() {
   const [trick, setTrick] = useState('');
-
-  const youtubeSearchUrl = useMemo(() => {
-    const cleanedTrick = trick.trim();
-
-    if (!cleanedTrick) {
-      return '';
-    }
-
-    const query = encodeURIComponent(`${cleanedTrick} skate trick`);
-    return `https://www.youtube.com/results?search_query=${query}`;
-  }, [trick]);
+  const youtubeSearchUrl = useYoutubeSearchUrl(`${trick.trim()} skate trick`);
 
   return (
     <section className="space-y-6">
